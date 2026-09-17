@@ -1,0 +1,2447 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fwrt — Trình vẽ lưu đồ</title>
+<style>
+  :root{
+    --bg:#eef1f7; --panel:#ffffff; --border:#e3e7f0; --text:#1e2433;
+    --muted:#7c869e; --accent:#4f46e5; --accent-soft:#eef0ff;
+    --danger:#e11d48;
+    --shadow:0 1px 3px rgba(20,30,60,.08), 0 8px 24px rgba(20,30,60,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+    background:var(--bg);color:var(--text);overflow:hidden;font-size:13px;
+  }
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  /* TOPBAR */
+  .topbar{
+    height:54px;flex:0 0 54px;background:var(--panel);
+    border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 14px;gap:12px;z-index:20;box-shadow:0 1px 2px rgba(20,30,60,.04);
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .logo{
+    width:32px;height:32px;border-radius:9px;display:grid;place-items:center;
+    background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 55%,#ec4899 100%);
+    color:#fff;font-weight:800;font-size:14px;letter-spacing:-.5px;
+    box-shadow:0 4px 12px rgba(99,102,241,.35);font-family:'Inter',sans-serif;
+  }
+  .brand .name{display:flex;flex-direction:column;line-height:1.05;}
+  .brand .name b{font-size:15.5px;letter-spacing:-.3px;font-weight:800;}
+  .brand .name small{font-size:10px;color:var(--muted);letter-spacing:.5px;font-weight:500;}
+  .tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+  .divider{width:1px;height:22px;background:var(--border);margin:0 4px;}
+
+  button{
+    font-family:inherit;font-size:12.5px;font-weight:500;
+    background:#fff;color:var(--text);border:1px solid var(--border);
+    padding:7px 11px;border-radius:8px;cursor:pointer;
+    transition:all .13s ease;display:inline-flex;align-items:center;gap:6px;
+    white-space:nowrap;
+  }
+  button:hover{background:#f6f7fb;border-color:#cfd6e6;}
+  button:active{transform:translateY(1px);}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 3px 10px rgba(79,70,229,.28);}
+  button.primary:hover{background:#4338ca;border-color:#4338ca;}
+  button.icon{padding:7px 9px;font-size:14px;line-height:1;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.danger{background:#fff1f4;border-color:#fecdd6;color:var(--danger);width:100%;justify-content:center;margin-top:6px;}
+  button.danger:hover{background:#ffe4ea;}
+
+  .chk{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none;padding:0 3px;}
+  .chk input{accent-color:var(--accent);cursor:pointer;}
+  #zoomLabel{font-size:12px;color:var(--muted);min-width:42px;text-align:center;font-variant-numeric:tabular-nums;}
+
+  .body{display:flex;flex:1;min-height:0;}
+
+  /* PALETTE */
+  .palette{
+    width:236px;flex:0 0 236px;background:var(--panel);
+    border-right:1px solid var(--border);overflow-y:auto;padding:12px 12px 14px;
+  }
+  .pal-group{margin-bottom:8px;border-radius:10px;border:1px solid var(--border);overflow:hidden;background:#fff;}
+  .pal-group-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 11px;cursor:pointer;font-size:11px;font-weight:700;
+    letter-spacing:.7px;text-transform:uppercase;color:var(--muted);
+    background:#fafbfe;user-select:none;transition:background .12s;
+  }
+  .pal-group-header:hover{background:#f3f5fb;color:var(--accent);}
+  .pal-group-header .chev{transition:transform .18s;font-size:10px;opacity:.7;}
+  .pal-group.collapsed .pal-group-header .chev{transform:rotate(-90deg);}
+  .pal-group.collapsed .pal-group-items{display:none;}
+  .pal-group-items{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;}
+  .pal-item{
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:7px 3px 6px;border:1px solid var(--border);border-radius:9px;
+    background:#fff;cursor:pointer;transition:all .13s ease;
+  }
+  .pal-item:hover{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-1px);box-shadow:0 4px 10px rgba(79,70,229,.12);}
+  .pal-item svg{display:block;}
+  .pal-item span{font-size:10px;color:var(--muted);text-align:center;line-height:1.15;}
+  .pal-item:hover span{color:var(--accent);font-weight:600;}
+
+  .hints{list-style:none;padding:0;margin:0;font-size:11.5px;color:var(--muted);line-height:1.65;}
+  .hints li{padding-left:14px;position:relative;margin-bottom:5px;}
+  .hints li::before{content:'▸';position:absolute;left:0;color:var(--accent);font-weight:700;}
+  .hints b{color:#4b5568;font-weight:600;}
+
+  /* CANVAS */
+  .canvas-wrap{
+    flex:1;position:relative;overflow:hidden;
+    background-color:#fbfcfe;
+    background-image:radial-gradient(circle,#d8ddea 1px,transparent 1px);
+    background-size:20px 20px;cursor:default;
+  }
+  #svg{width:100%;height:100%;display:block;touch-action:none;user-select:none;}
+  #svg.panning{cursor:grabbing !important;}
+  #svg.linking{cursor:crosshair !important;}
+
+  .node{cursor:move;}
+  .node.locked{cursor:not-allowed;}
+  .node path{transition:filter .12s;}
+  .node:hover path.node-shape{filter:drop-shadow(0 3px 7px rgba(30,40,80,.16));}
+  .port{cursor:crosshair;}
+  .port .port-dot{opacity:0;transition:opacity .13s;pointer-events:none;}
+  .node:hover .port .port-dot,
+  .node.selected .port .port-dot,
+  .port:hover .port-dot{opacity:1;}
+  .port:hover .port-dot{fill:#4f46e5 !important;stroke:#4f46e5 !important;}
+  .node.selected .sel-outline{fill:none;stroke:#4f46e5;stroke-width:2;stroke-dasharray:6 4;pointer-events:none;opacity:.85;}
+  .lock-badge{pointer-events:none;}
+
+  .edge .hit{stroke:transparent;stroke-width:18;fill:none;cursor:pointer;}
+  .edge .line{fill:none;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;transition:filter .12s;}
+  .edge:hover .line{filter:drop-shadow(0 0 4px rgba(79,70,229,.5));}
+  .edge.selected .line{stroke:#4f46e5 !important;}
+  .edge text{font-family:inherit;font-size:11.5px;fill:#475569;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round;pointer-events:none;user-select:none;}
+
+  .handle{fill:#fff;stroke:#4f46e5;stroke-width:1.5;cursor:nwse-resize;}
+  .target-highlight{fill:none;stroke:#4f46e5;stroke-width:2.5;stroke-dasharray:8 5;pointer-events:none;}
+
+  .node-editor{
+    position:absolute;border:2px solid var(--accent);border-radius:8px;
+    background:#fff;padding:6px 8px;font-family:inherit;font-size:13px;
+    resize:none;outline:none;box-shadow:0 8px 30px rgba(79,70,229,.3);
+    text-align:center;line-height:1.3;z-index:50;color:var(--text);
+  }
+
+  .zoombar{
+    position:absolute;left:14px;bottom:14px;display:flex;align-items:center;gap:7px;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
+    border:1px solid var(--border);border-radius:10px;padding:6px 10px;
+    box-shadow:var(--shadow);font-size:11.5px;color:var(--muted);
+  }
+  .zoombar b{color:#4b5568;font-weight:600;}
+
+  .mode-indicator{
+    position:absolute;top:14px;left:14px;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
+    border:1px solid var(--border);border-radius:8px;padding:5px 10px;
+    font-size:11.5px;color:var(--muted);box-shadow:var(--shadow);
+    pointer-events:none;transition:opacity .2s;opacity:0;
+  }
+  .mode-indicator.show{opacity:1;}
+
+  /* MINIMAP */
+  .minimap{
+    position:absolute;right:14px;bottom:14px;width:200px;height:140px;
+    background:rgba(255,255,255,.96);backdrop-filter:blur(8px);
+    border:1px solid var(--border);border-radius:10px;
+    box-shadow:var(--shadow);overflow:hidden;cursor:pointer;
+    transition:opacity .2s;
+  }
+  .minimap svg{width:100%;height:100%;display:block;}
+  .minimap-viewport{fill:rgba(79,70,229,.10);stroke:#4f46e5;stroke-width:1.5;}
+
+  /* SEARCH */
+  .search-panel{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    background:#fff;border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 10px 40px rgba(20,30,60,.16);padding:8px;
+    display:none;z-index:30;width:340px;
+  }
+  .search-panel.show{display:block;}
+  .search-panel input{
+    font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);
+    border-radius:8px;width:100%;outline:none;color:var(--text);
+  }
+  .search-panel input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+  .search-results{max-height:280px;overflow-y:auto;margin-top:6px;}
+  .search-result{
+    padding:7px 10px;border-radius:7px;cursor:pointer;font-size:12.5px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .search-result:hover{background:var(--accent-soft);color:var(--accent);}
+  .search-result .dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+  .search-result .meta{margin-left:auto;font-size:10.5px;color:var(--muted);}
+  .search-empty{padding:14px;text-align:center;color:var(--muted);font-size:12px;}
+
+  /* INSPECTOR */
+  .inspector{
+    width:272px;flex:0 0 272px;background:var(--panel);
+    border-left:1px solid var(--border);overflow-y:auto;padding:14px;
+  }
+  .insp-title{
+    font-size:10.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;
+    color:var(--muted);margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);
+  }
+  .insp-title:not(:first-child){margin-top:20px;}
+  .fld{display:flex;flex-direction:column;gap:5px;margin-bottom:11px;}
+  .fld>span{font-size:11.5px;color:var(--muted);font-weight:500;}
+  .fld input[type=text],.fld input[type=number],.fld textarea,.fld select{
+    font-family:inherit;font-size:12.5px;padding:7px 9px;border:1px solid var(--border);
+    border-radius:8px;background:#fafbfe;color:var(--text);outline:none;width:100%;
+    transition:all .13s;resize:vertical;
+  }
+  .fld textarea{line-height:1.4;min-height:56px;}
+  .fld input:focus,.fld textarea:focus,.fld select:focus{
+    border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-soft);
+  }
+  .fld input[type=color]{width:100%;height:34px;padding:3px;border:1px solid var(--border);border-radius:8px;background:#fafbfe;cursor:pointer;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;}
+  .empty-state{color:var(--muted);font-size:12.5px;text-align:center;padding:44px 14px;line-height:1.8;}
+  .empty-state .big{font-size:32px;display:block;margin-bottom:10px;opacity:.35;}
+  .swatch-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px;}
+  .swatch{width:22px;height:22px;border-radius:6px;border:2px solid #fff;cursor:pointer;box-shadow:0 0 0 1px var(--border);transition:transform .12s;}
+  .swatch:hover{transform:scale(1.15);}
+  .align-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:8px;}
+  .align-btn{
+    padding:7px 0;border:1px solid var(--border);border-radius:7px;background:#fff;
+    cursor:pointer;display:grid;place-items:center;color:#64748b;font-size:13px;
+    transition:all .12s;
+  }
+  .align-btn:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+  .align-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .seg{display:grid;grid-auto-flow:column;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fafbfe;}
+  .seg button{border-radius:0;border:none;background:transparent;padding:6px 8px;font-size:12px;color:var(--muted);justify-content:center;}
+  .seg button:hover{background:#f0f2f8;color:var(--text);}
+  .seg button.active{background:var(--accent);color:#fff;}
+
+  /* HELP MODAL */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(20,30,60,.5);backdrop-filter:blur(3px);
+    z-index:500;display:none;align-items:center;justify-content:center;
+  }
+  .modal-bg.show{display:flex;}
+  .modal{
+    background:#fff;border-radius:16px;box-shadow:0 24px 80px rgba(20,30,60,.35);
+    max-width:560px;width:calc(100% - 32px);max-height:80vh;overflow-y:auto;
+    animation:modalIn .18s ease-out;
+  }
+  @keyframes modalIn{from{opacity:0;transform:translateY(12px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+  .modal-header{padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+  .modal-header h2{margin:0;font-size:17px;font-weight:800;letter-spacing:-.3px;}
+  .modal-body{padding:16px 22px 22px;}
+  .shortcut-section{margin-bottom:16px;}
+  .shortcut-section h3{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin:0 0 8px;}
+  .shortcut-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--border);}
+  .shortcut-row:last-child{border-bottom:none;}
+  .shortcut-row kbd{
+    background:#f1f3f8;border:1px solid #d8dde9;border-bottom-width:2px;border-radius:5px;
+    padding:2px 7px;font-size:11px;font-family:ui-monospace,monospace;color:#4b5568;
+    min-width:26px;text-align:center;
+  }
+  .modal-close{
+    background:transparent;border:none;font-size:22px;color:var(--muted);cursor:pointer;
+    padding:4px 8px;border-radius:8px;line-height:1;
+  }
+  .modal-close:hover{background:#f0f2f8;color:var(--text);}
+
+  /* CONTEXT MENU */
+  .ctx-menu{
+    position:fixed;background:#fff;border:1px solid var(--border);
+    border-radius:11px;padding:6px;box-shadow:0 12px 44px rgba(20,30,60,.20), 0 2px 8px rgba(20,30,60,.08);
+    min-width:220px;z-index:1000;display:none;font-size:12.5px;
+    animation:ctxIn .12s ease-out;
+  }
+  @keyframes ctxIn{from{opacity:0;transform:scale(.96) translateY(-4px);}to{opacity:1;transform:scale(1) translateY(0);}}
+  .ctx-menu.show{display:block;}
+  .ctx-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--text);user-select:none;transition:background .1s;}
+  .ctx-item:hover{background:var(--accent-soft);color:var(--accent);}
+  .ctx-item.danger{color:var(--danger);}
+  .ctx-item.danger:hover{background:#fff1f4;}
+  .ctx-item.disabled{opacity:.4;pointer-events:none;}
+  .ctx-item .icon{width:15px;text-align:center;opacity:.75;font-size:13px;}
+  .ctx-item .kbd{margin-left:auto;font-size:10.5px;color:var(--muted);font-family:ui-monospace,monospace;}
+  .ctx-item:hover .kbd{color:var(--accent);}
+  .ctx-sep{height:1px;background:var(--border);margin:5px 4px;}
+  .ctx-header{padding:8px 10px 5px;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);}
+  .ctx-swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;padding:5px 10px 8px;}
+  .ctx-swatches .sw{width:100%;aspect-ratio:1;border-radius:6px;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--border);transition:transform .12s;}
+  .ctx-swatches .sw:hover{transform:scale(1.14);}
+  .ctx-shapes{display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:4px 6px 6px;max-height:260px;overflow-y:auto;}
+  .ctx-shape{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;cursor:pointer;font-size:11.5px;color:var(--text);}
+  .ctx-shape:hover{background:var(--accent-soft);color:var(--accent);}
+  .ctx-shape svg{flex-shrink:0;}
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#d3d9e6;border-radius:6px;border:2px solid var(--panel);}
+  ::-webkit-scrollbar-thumb:hover{background:#b9c2d6;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">Fw</div>
+      <div class="name">
+        <b>Fwrt</b>
+        <small>FLOWCHART EDITOR</small>
+      </div>
+    </div>
+    <div class="tools">
+      <button class="icon" id="btnUndo" title="Hoàn tác (Ctrl+Z)">↶</button>
+      <button class="icon" id="btnRedo" title="Làm lại (Ctrl+Y)">↷</button>
+      <button class="icon" id="btnSearch" title="Tìm kiếm (Ctrl+F)">🔍</button>
+      <button class="icon" id="btnHelp" title="Trợ giúp (?)">?</button>
+      <span class="divider"></span>
+      <button class="icon" id="btnZoomOut" title="Thu nhỏ">−</button>
+      <span id="zoomLabel">100%</span>
+      <button class="icon" id="btnZoomIn" title="Phóng to">+</button>
+      <button id="btnFit" title="Vừa khung (Ctrl+0)">Vừa khung</button>
+      <span class="divider"></span>
+      <label class="chk"><input type="checkbox" id="chkGrid" checked> Lưới</label>
+      <label class="chk"><input type="checkbox" id="chkSnap"> Bám lưới</label>
+      <span class="divider"></span>
+      <button id="btnNew" title="Tạo mới">Mới</button>
+      <button id="btnOpen" title="Mở file .json">Mở</button>
+      <button id="btnSave" title="Lưu file .json (Ctrl+S)">Lưu</button>
+      <button id="btnSvg" title="Xuất SVG">SVG</button>
+      <button id="btnPng" class="primary" title="Xuất ảnh PNG">⤓ PNG</button>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="palette" id="palette"></aside>
+
+    <main class="canvas-wrap" id="canvasWrap">
+      <svg id="svg">
+        <defs id="defs"></defs>
+        <g id="viewport">
+          <g id="edgesLayer"></g>
+          <g id="nodesLayer"></g>
+          <g id="overlayLayer"></g>
+        </g>
+      </svg>
+      <div class="mode-indicator" id="modeIndicator"></div>
+      <div class="zoombar">
+        <span>Zoom: <b id="zoomLabel2">100%</b></span>
+        <span>·</span>
+        <span>Hình: <b id="statNodes">0</b></span>
+        <span>·</span>
+        <span>Nối: <b id="statEdges">0</b></span>
+      </div>
+      <div class="minimap" id="minimap"><svg id="minimapSvg"></svg></div>
+      <div class="search-panel" id="searchPanel">
+        <input type="text" id="searchInput" placeholder="Tìm hình theo nội dung…">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </main>
+
+    <aside class="inspector" id="inspector"></aside>
+  </div>
+</div>
+
+<div class="modal-bg" id="helpModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Phím tắt & Hướng dẫn</h2>
+      <button class="modal-close" id="helpClose">✕</button>
+    </div>
+    <div class="modal-body" id="helpBody"></div>
+  </div>
+</div>
+
+<div class="ctx-menu" id="ctxMenu"></div>
+<input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+
+<script>
+/* ==================================================================
+   Fwrt — Flowchart Editor v3
+   ================================================================== */
+const NS = 'http://www.w3.org/2000/svg';
+const FONT = "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
+const GRID = 20;
+
+const svgEl = (tag, attrs = {}) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => 'n' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/* ---------- SHAPES (3 groups, 21 shapes) ---------- */
+const SHAPES = {
+  /* Cơ bản */
+  oval:          { label: 'Bầu dục',    group: 'Cơ bản',     w: 152, h: 56,  fill: '#dcfce7', stroke: '#16a34a' },
+  rect:          { label: 'Chữ nhật',   group: 'Cơ bản',     w: 172, h: 70,  fill: '#dbeafe', stroke: '#2563eb' },
+  diamond:       { label: 'Thoi',       group: 'Cơ bản',     w: 164, h: 104, fill: '#fef3c7', stroke: '#d97706' },
+  parallelogram: { label: 'Bình hành',  group: 'Cơ bản',     w: 172, h: 70,  fill: '#f3e8ff', stroke: '#9333ea' },
+  circle:        { label: 'Tròn',       group: 'Cơ bản',     w: 76,  h: 76,  fill: '#f1f5f9', stroke: '#64748b' },
+
+  /* Tiêu chuẩn */
+  document:      { label: 'Tài liệu',    group: 'Tiêu chuẩn', w: 172, h: 80,  fill: '#fce7f3', stroke: '#db2777' },
+  cylinder:      { label: 'Trụ',         group: 'Tiêu chuẩn', w: 152, h: 90,  fill: '#cffafe', stroke: '#0891b2' },
+  hexagon:       { label: 'Lục giác',    group: 'Tiêu chuẩn', w: 172, h: 70,  fill: '#e0e7ff', stroke: '#4f46e5' },
+  trapezoid:     { label: 'Thang',       group: 'Tiêu chuẩn', w: 172, h: 70,  fill: '#f5f5f4', stroke: '#78716c' },
+  note:          { label: 'Ghi chú',     group: 'Tiêu chuẩn', w: 162, h: 80,  fill: '#fefce8', stroke: '#ca8a04' },
+  predefined:    { label: 'Định nghĩa',  group: 'Tiêu chuẩn', w: 184, h: 70,  fill: '#dbeafe', stroke: '#2563eb' },
+
+  /* Mở rộng */
+  pentagon:      { label: 'Off-page',    group: 'Mở rộng', w: 154, h: 82, fill: '#dcfce7', stroke: '#16a34a' },
+  annotation:    { label: 'Chú thích',   group: 'Mở rộng', w: 154, h: 82, fill: 'transparent', stroke: '#64748b' },
+  display:       { label: 'Màn hình',    group: 'Mở rộng', w: 172, h: 70, fill: '#f3e8ff', stroke: '#9333ea' },
+  delay:         { label: 'Trễ',         group: 'Mở rộng', w: 172, h: 70, fill: '#fee2e2', stroke: '#dc2626' },
+  manual_input:  { label: 'Nhập tay',    group: 'Mở rộng', w: 172, h: 70, fill: '#fef3c7', stroke: '#d97706' },
+  internal_storage: { label: 'Lưu nội bộ', group: 'Mở rộng', w: 166, h: 82, fill: '#f1f5f9', stroke: '#64748b' },
+  stored_data:   { label: 'Dữ liệu lưu', group: 'Mở rộng', w: 172, h: 70, fill: '#cffafe', stroke: '#0891b2' },
+  loop_limit:    { label: 'Giới hạn lặp',group: 'Mở rộng', w: 172, h: 70, fill: '#e0e7ff', stroke: '#4f46e5' },
+  merge:         { label: 'Hợp nhất',    group: 'Mở rộng', w: 100, h: 84, fill: '#fce7f3', stroke: '#db2777' },
+  or_node:       { label: 'OR',          group: 'Mở rộng', w: 76,  h: 76, fill: '#dcfce7', stroke: '#16a34a' },
+  summing:       { label: 'Tổng',        group: 'Mở rộng', w: 76,  h: 76, fill: '#fee2e2', stroke: '#dc2626' },
+};
+
+const GROUP_ORDER = ['Cơ bản', 'Tiêu chuẩn', 'Mở rộng'];
+
+/* ---------- Shape path generators ---------- */
+function shapePaths(type, x, y, w, h) {
+  const rr = rad => {
+    rad = Math.min(rad, w / 2, h / 2);
+    return `M ${x + rad} ${y} H ${x + w - rad} A ${rad} ${rad} 0 0 1 ${x + w} ${y + rad} ` +
+           `V ${y + h - rad} A ${rad} ${rad} 0 0 1 ${x + w - rad} ${y + h} ` +
+           `H ${x + rad} A ${rad} ${rad} 0 0 1 ${x} ${y + h - rad} ` +
+           `V ${y + rad} A ${rad} ${rad} 0 0 1 ${x + rad} ${y} Z`;
+  };
+  const cx = x + w / 2, cy = y + h / 2;
+  switch (type) {
+    case 'oval': return [rr(h / 2)];
+    case 'rect': return [rr(10)];
+    case 'diamond': return [`M ${cx} ${y} L ${x + w} ${cy} L ${cx} ${y + h} L ${x} ${cy} Z`];
+    case 'parallelogram': {
+      const o = Math.min(w * 0.18, 26);
+      return [`M ${x + o} ${y} L ${x + w} ${y} L ${x + w - o} ${y + h} L ${x} ${y + h} Z`];
+    }
+    case 'hexagon': {
+      const o = Math.min(w * 0.15, 26);
+      return [`M ${x + o} ${y} L ${x + w - o} ${y} L ${x + w} ${cy} L ${x + w - o} ${y + h} L ${x + o} ${y + h} L ${x} ${cy} Z`];
+    }
+    case 'trapezoid': {
+      const o = Math.min(w * 0.12, 22);
+      return [`M ${x} ${y} L ${x + w} ${y} L ${x + w - o} ${y + h} L ${x + o} ${y + h} Z`];
+    }
+    case 'document': {
+      const k = h * 0.22;
+      return [`M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + h - k} ` +
+              `C ${x + w * 0.72} ${y + h + k * 0.9} ${x + w * 0.28} ${y + h - k * 1.9} ${x} ${y + h - k} Z`];
+    }
+    case 'cylinder': {
+      const ry = Math.min(h * 0.16, 18), rx = w / 2;
+      return [
+        `M ${x} ${y + ry} L ${x} ${y + h - ry} A ${rx} ${ry} 0 0 0 ${x + w} ${y + h - ry} ` +
+        `L ${x + w} ${y + ry} A ${rx} ${ry} 0 0 1 ${x} ${y + ry} Z`,
+        `M ${x} ${y + ry} A ${rx} ${ry} 0 0 0 ${x + w} ${y + ry}`
+      ];
+    }
+    case 'circle': {
+      const rx = w / 2, ry = h / 2;
+      return [`M ${x} ${cy} A ${rx} ${ry} 0 1 1 ${x + w} ${cy} A ${rx} ${ry} 0 1 1 ${x} ${cy} Z`];
+    }
+    case 'note': {
+      const f = Math.min(w, h) * 0.28;
+      return [
+        `M ${x} ${y} L ${x + w - f} ${y} L ${x + w} ${y + f} L ${x + w} ${y + h} L ${x} ${y + h} Z`,
+        `M ${x + w - f} ${y} L ${x + w - f} ${y + f} L ${x + w} ${y + f}`
+      ];
+    }
+    case 'predefined': {
+      const off = w * 0.11;
+      return [
+        rr(8),
+        `M ${x + off} ${y} L ${x + off} ${y + h}`,
+        `M ${x + w - off} ${y} L ${x + w - off} ${y + h}`
+      ];
+    }
+    case 'pentagon': {
+      const f = h * 0.35;
+      return [`M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + h - f} L ${cx} ${y + h} L ${x} ${y + h - f} Z`];
+    }
+    case 'annotation': {
+      const ox = w * 0.20;
+      return [`M ${x + w} ${y} L ${x + ox} ${y} L ${x + ox} ${y + h} L ${x + w} ${y + h}`];
+    }
+    case 'display': {
+      const c = w * 0.15;
+      return [`M ${x + c} ${y} C ${x + c} ${y + h * 0.4} ${x} ${y + h * 0.6} ${x} ${y + h} ` +
+              `L ${x + w} ${y + h} C ${x + w} ${y + h * 0.6} ${x + w - c} ${y + h * 0.4} ${x + w - c} ${y} Z`];
+    }
+    case 'delay': {
+      const r = h / 2;
+      return [`M ${x} ${y} L ${x + w - r} ${y} A ${r} ${r} 0 0 1 ${x + w - r} ${y + h} L ${x} ${y + h} Z`];
+    }
+    case 'manual_input': {
+      const s = h * 0.25;
+      return [`M ${x} ${y + s} L ${x + w} ${y} L ${x + w} ${y + h} L ${x} ${y + h} Z`];
+    }
+    case 'internal_storage': {
+      return [
+        rr(0),
+        `M ${x + w * 0.2} ${y} L ${x + w * 0.2} ${y + h}`,
+        `M ${x} ${y + h * 0.25} L ${x + w} ${y + h * 0.25}`
+      ];
+    }
+    case 'stored_data': {
+      const c = w * 0.15;
+      return [`M ${x + c} ${y} L ${x + w} ${y} L ${x + w} ${y + h} L ${x + c} ${y + h} ` +
+              `C ${x - c * 0.3} ${y + h * 0.75} ${x - c * 0.3} ${y + h * 0.25} ${x + c} ${y} Z`];
+    }
+    case 'loop_limit': {
+      const s = w * 0.15;
+      return [`M ${x} ${y} L ${x + w} ${y} L ${x + w - s} ${y + h} L ${x + s} ${y + h} Z`];
+    }
+    case 'merge': {
+      return [`M ${x} ${y} L ${x + w} ${y} L ${cx} ${y + h} Z`];
+    }
+    case 'or_node': {
+      const rx = w / 2, ry = h / 2;
+      const s = Math.min(w, h) * 0.22;
+      return [
+        `M ${x} ${cy} A ${rx} ${ry} 0 1 1 ${x + w} ${cy} A ${rx} ${ry} 0 1 1 ${x} ${cy} Z`,
+        `M ${cx - s} ${cy} L ${cx + s} ${cy}`,
+        `M ${cx} ${cy - s} L ${cx} ${cy + s}`
+      ];
+    }
+    case 'summing': {
+      const rx = w / 2, ry = h / 2;
+      const s = Math.min(w, h) * 0.22;
+      return [
+        `M ${x} ${cy} A ${rx} ${ry} 0 1 1 ${x + w} ${cy} A ${rx} ${ry} 0 1 1 ${x} ${cy} Z`,
+        `M ${cx - s} ${cy - s} L ${cx + s} ${cy + s}`,
+        `M ${cx + s} ${cy - s} L ${cx - s} ${cy + s}`
+      ];
+    }
+  }
+  return [rr(10)];
+}
+
+/* ---------- Color pairs ---------- */
+const COLOR_PAIRS = [
+  { fill: '#dbeafe', stroke: '#2563eb' },
+  { fill: '#dcfce7', stroke: '#16a34a' },
+  { fill: '#fef3c7', stroke: '#d97706' },
+  { fill: '#fce7f3', stroke: '#db2777' },
+  { fill: '#f3e8ff', stroke: '#9333ea' },
+  { fill: '#cffafe', stroke: '#0891b2' },
+  { fill: '#fee2e2', stroke: '#dc2626' },
+  { fill: '#f1f5f9', stroke: '#64748b' },
+  { fill: '#e0e7ff', stroke: '#4f46e5' },
+  { fill: '#fefce8', stroke: '#ca8a04' },
+];
+const EDGE_COLORS = ['#7c869e', '#2563eb', '#16a34a', '#dc2626', '#d97706', '#9333ea', '#db2777', '#0891b2', '#4f46e5', '#1e2433'];
+
+/* ---------- State ---------- */
+let nodes = [];
+let edges = [];
+const selected = { nodes: new Set(), edges: new Set() };
+const view = { x: 0, y: 0, k: 1 };
+let drag = null;
+let spaceDown = false;
+let snapToGrid = false;
+let clipboard = null;
+let linkTargetId = null;
+
+const svg = document.getElementById('svg');
+const defs = document.getElementById('defs');
+const viewport = document.getElementById('viewport');
+const edgesLayer = document.getElementById('edgesLayer');
+const nodesLayer = document.getElementById('nodesLayer');
+const overlayLayer = document.getElementById('overlayLayer');
+const canvasWrap = document.getElementById('canvasWrap');
+const inspector = document.getElementById('inspector');
+const paletteEl = document.getElementById('palette');
+const fileInput = document.getElementById('fileInput');
+const zoomLabel = document.getElementById('zoomLabel');
+const zoomLabel2 = document.getElementById('zoomLabel2');
+const statNodes = document.getElementById('statNodes');
+const statEdges = document.getElementById('statEdges');
+const chkGrid = document.getElementById('chkGrid');
+const chkSnap = document.getElementById('chkSnap');
+const modeIndicator = document.getElementById('modeIndicator');
+const ctxMenu = document.getElementById('ctxMenu');
+const minimap = document.getElementById('minimap');
+const minimapSvg = document.getElementById('minimapSvg');
+const searchPanel = document.getElementById('searchPanel');
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+const helpModal = document.getElementById('helpModal');
+const helpBody = document.getElementById('helpBody');
+
+/* ---------- Markers ---------- */
+const markerCache = new Map();
+let markerCounter = 0;
+function getMarker(color) {
+  if (markerCache.has(color)) return markerCache.get(color);
+  const safe = color.replace(/[^a-z0-9]/gi, '');
+  const id = 'ar-' + safe + '-' + (markerCounter++);
+  const m = svgEl('marker', {
+    id, viewBox: '0 0 10 10', refX: 9, refY: 5,
+    markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse',
+    markerUnits: 'strokeWidth'
+  });
+  m.appendChild(svgEl('path', { d: 'M 0 1 L 9.5 5 L 0 9 z', fill: color }));
+  defs.appendChild(m);
+  markerCache.set(color, id);
+  return id;
+}
+
+/* ---------- Text wrap ---------- */
+const _mctx = document.createElement('canvas').getContext('2d');
+function wrapText(text, maxWidth, fontSize, weight, style) {
+  _mctx.font = `${style || ''} ${weight || 500} ${fontSize}px ${FONT}`.trim();
+  const out = [];
+  String(text ?? '').split('\n').forEach(para => {
+    if (!para) { out.push(''); return; }
+    const words = para.split(/\s+/);
+    let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (_mctx.measureText(test).width > maxWidth && line) { out.push(line); line = w; }
+      else line = test;
+    }
+    out.push(line);
+  });
+  return out.length ? out : [''];
+}
+
+/* ---------- Geometry ---------- */
+function portPos(n, side) {
+  switch (side) {
+    case 'top':    return { x: n.x + n.w / 2, y: n.y };
+    case 'right':  return { x: n.x + n.w,     y: n.y + n.h / 2 };
+    case 'bottom': return { x: n.x + n.w / 2, y: n.y + n.h };
+    case 'left':   return { x: n.x,           y: n.y + n.h / 2 };
+  }
+  return { x: n.x + n.w / 2, y: n.y + n.h / 2 };
+}
+function autoSides(a, b) {
+  const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
+  const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
+  if (Math.abs(dx) > Math.abs(dy) * 1.15) return dx > 0 ? ['right', 'left'] : ['left', 'right'];
+  return dy > 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+}
+function shiftPt(p, side, d) {
+  switch (side) {
+    case 'top':    return { x: p.x, y: p.y - d };
+    case 'bottom': return { x: p.x, y: p.y + d };
+    case 'left':   return { x: p.x - d, y: p.y };
+    case 'right':  return { x: p.x + d, y: p.y };
+  }
+  return p;
+}
+
+/* Edge routing: curve / straight / orthogonal */
+function buildEdgePath(p1, s1, p2, s2, routing) {
+  if (routing === 'straight') {
+    return {
+      d: `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`,
+      mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+    };
+  }
+  if (routing === 'orthogonal') {
+    const gap = 28;
+    const e1 = shiftPt(p1, s1, gap);
+    const e2 = shiftPt(p2, s2, gap);
+    const h1 = s1 === 'left' || s1 === 'right';
+    const h2 = s2 === 'left' || s2 === 'right';
+    const pts = [p1, e1];
+    if (h1 && h2) {
+      const mx = (e1.x + e2.x) / 2;
+      pts.push({ x: mx, y: e1.y }, { x: mx, y: e2.y });
+    } else if (!h1 && !h2) {
+      const my = (e1.y + e2.y) / 2;
+      pts.push({ x: e1.x, y: my }, { x: e2.x, y: my });
+    } else if (h1) {
+      pts.push({ x: e2.x, y: e1.y });
+    } else {
+      pts.push({ x: e1.x, y: e2.y });
+    }
+    pts.push(e2, p2);
+    /* dedupe */
+    const filt = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      const l = filt[filt.length - 1];
+      if (Math.abs(pts[i].x - l.x) > 0.5 || Math.abs(pts[i].y - l.y) > 0.5) filt.push(pts[i]);
+    }
+    let dstr = `M ${filt[0].x} ${filt[0].y}`;
+    for (let i = 1; i < filt.length; i++) dstr += ` L ${filt[i].x} ${filt[i].y}`;
+    /* mid point along path */
+    let totalLen = 0;
+    for (let i = 1; i < filt.length; i++) totalLen += Math.hypot(filt[i].x - filt[i - 1].x, filt[i].y - filt[i - 1].y);
+    let acc = 0, mid = filt[0];
+    for (let i = 1; i < filt.length; i++) {
+      const seg = Math.hypot(filt[i].x - filt[i - 1].x, filt[i].y - filt[i - 1].y);
+      if (acc + seg >= totalLen / 2) {
+        const t = (totalLen / 2 - acc) / seg;
+        mid = { x: filt[i - 1].x + (filt[i].x - filt[i - 1].x) * t, y: filt[i - 1].y + (filt[i].y - filt[i - 1].y) * t };
+        break;
+      }
+      acc += seg;
+    }
+    return { d: dstr, mid };
+  }
+  /* curve (default) */
+  const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  const d = clamp(dist * 0.42, 34, 160);
+  const c1 = shiftPt(p1, s1, d);
+  const c2 = shiftPt(p2, s2, d);
+  return {
+    d: `M ${p1.x} ${p1.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p2.x} ${p2.y}`,
+    mid: {
+      x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8,
+      y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8
+    }
+  };
+}
+
+const getNode = id => nodes.find(n => n.id === id);
+const getEdge = id => edges.find(e => e.id === id);
+
+/* ==================================================================
+   RENDER
+   ================================================================== */
+function render(skipInspector) {
+  viewport.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
+  edgesLayer.textContent = '';
+  nodesLayer.textContent = '';
+  overlayLayer.textContent = '';
+
+  edges.forEach(e => edgesLayer.appendChild(makeEdgeEl(e)));
+  nodes.forEach(n => nodesLayer.appendChild(makeNodeEl(n)));
+
+  drawOverlay();
+  updateGrid();
+  drawMinimap();
+  if (!skipInspector) updateInspector();
+
+  const pct = Math.round(view.k * 100) + '%';
+  zoomLabel.textContent = pct;
+  zoomLabel2.textContent = pct;
+  statNodes.textContent = nodes.length;
+  statEdges.textContent = edges.length;
+}
+
+function makeNodeEl(n) {
+  const g = svgEl('g', {
+    class: 'node' + (selected.nodes.has(n.id) ? ' selected' : '') + (n.locked ? ' locked' : ''),
+    'data-id': n.id
+  });
+
+  if (linkTargetId === n.id) {
+    const hp = shapePaths(n.type, n.x - 5, n.y - 5, n.w + 10, n.h + 10)[0];
+    g.appendChild(svgEl('path', { d: hp, class: 'target-highlight' }));
+  }
+
+  const paths = shapePaths(n.type, n.x, n.y, n.w, n.h);
+  paths.forEach((d, i) => {
+    g.appendChild(svgEl('path', {
+      d, class: i === 0 ? 'node-shape' : '',
+      fill: i === 0 ? n.fill : 'none',
+      stroke: n.stroke, 'stroke-width': n.strokeWidth || 2,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+    }));
+  });
+
+  if (selected.nodes.has(n.id)) {
+    const b = shapePaths(n.type, n.x - 3, n.y - 3, n.w + 6, n.h + 6)[0];
+    g.appendChild(svgEl('path', { d: b, class: 'sel-outline' }));
+  }
+
+  /* text with alignment, bold, italic */
+  if (n.text && n.text.length) {
+    const fs = n.fontSize || 14;
+    const weight = n.bold ? 700 : 500;
+    const fstyle = n.italic ? 'italic' : '';
+    const pad = (n.type === 'diamond' || n.type === 'merge') ? n.w * 0.28 : 18;
+    const lines = wrapText(n.text, Math.max(30, n.w - pad), fs, weight, fstyle);
+    const lineH = fs * 1.34;
+    const totalH = (lines.length - 1) * lineH;
+    const vAlign = n.vAlign || 'middle';
+    let startY = n.y + n.h / 2 - totalH / 2;
+    if (vAlign === 'top') startY = n.y + 12;
+    else if (vAlign === 'bottom') startY = n.y + n.h - 12 - totalH;
+
+    const hAlign = n.hAlign || 'center';
+    let tx = n.x + n.w / 2, anchor = 'middle';
+    if (hAlign === 'left') { tx = n.x + 12; anchor = 'start'; }
+    else if (hAlign === 'right') { tx = n.x + n.w - 12; anchor = 'end'; }
+
+    const t = svgEl('text', {
+      x: tx, y: startY, 'text-anchor': anchor,
+      'dominant-baseline': 'middle', 'font-size': fs, 'font-family': FONT,
+      'font-weight': weight, 'font-style': fstyle || 'normal',
+      fill: n.textColor || '#1e2433',
+      style: 'pointer-events:none;user-select:none'
+    });
+    lines.forEach((ln, i) => {
+      const ts = svgEl('tspan', { x: tx, dy: i === 0 ? 0 : lineH });
+      ts.textContent = ln;
+      t.appendChild(ts);
+    });
+    g.appendChild(t);
+  }
+
+  /* ports (hidden when locked) */
+  if (!n.locked) {
+    ['top', 'right', 'bottom', 'left'].forEach(side => {
+      const p = portPos(n, side);
+      const pg = svgEl('g', { class: 'port', 'data-side': side, 'data-node': n.id });
+      pg.appendChild(svgEl('circle', { cx: p.x, cy: p.y, r: 12, fill: 'transparent', 'pointer-events': 'all' }));
+      pg.appendChild(svgEl('circle', {
+        cx: p.x, cy: p.y, r: 5, class: 'port-dot',
+        fill: '#fff', stroke: n.stroke, 'stroke-width': 2, 'pointer-events': 'none'
+      }));
+      g.appendChild(pg);
+    });
+  }
+
+  /* lock badge */
+  if (n.locked) {
+    const bx = n.x + n.w - 10, by = n.y + 10;
+    const lk = svgEl('g', { class: 'lock-badge' });
+    lk.appendChild(svgEl('circle', { cx: bx, cy: by, r: 9, fill: '#fff', stroke: '#94a3b8', 'stroke-width': 1.5 }));
+    const t = svgEl('text', {
+      x: bx, y: by + 1, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      'font-size': 11, fill: '#64748b', style: 'user-select:none;pointer-events:none'
+    });
+    t.textContent = '🔒';
+    lk.appendChild(t);
+    g.appendChild(lk);
+  }
+  return g;
+}
+
+function makeEdgeEl(ed) {
+  const g = svgEl('g', { class: 'edge' + (selected.edges.has(ed.id) ? ' selected' : ''), 'data-id': ed.id });
+  const a = getNode(ed.from), b = getNode(ed.to);
+  if (!a || !b) return g;
+
+  const [auto1, auto2] = autoSides(a, b);
+  const s1 = (ed.fromSide && ed.fromSide !== 'auto') ? ed.fromSide : auto1;
+  const s2 = (ed.toSide && ed.toSide !== 'auto') ? ed.toSide : auto2;
+  const p1 = portPos(a, s1), p2 = portPos(b, s2);
+  const routing = ed.routing || 'curve';
+  const { d, mid } = buildEdgePath(p1, s1, p2, s2, routing);
+  const color = ed.color || '#7c869e';
+  const width = ed.width || 2;
+
+  g.appendChild(svgEl('path', { d, class: 'hit' }));
+
+  const lineAttrs = { d, class: 'line', stroke: color, 'stroke-width': width };
+  const mId = getMarker(color);
+  if (ed.arrowEnd !== false) lineAttrs['marker-end'] = `url(#${mId})`;
+  if (ed.arrowStart === true) lineAttrs['marker-start'] = `url(#${mId})`;
+  if (ed.dashed) lineAttrs['stroke-dasharray'] = '8 6';
+  g.appendChild(svgEl('path', lineAttrs));
+
+  if (ed.label) {
+    /* background pill for label */
+    const pad = 4;
+    _mctx.font = `500 11.5px ${FONT}`;
+    const tw = _mctx.measureText(ed.label).width;
+    g.appendChild(svgEl('rect', {
+      x: mid.x - tw / 2 - pad, y: mid.y - 10, width: tw + pad * 2, height: 16,
+      rx: 6, fill: '#fff', stroke: '#e3e7f0', 'stroke-width': 1,
+      'pointer-events': 'none'
+    }));
+    const t = svgEl('text', { x: mid.x, y: mid.y - 2, 'text-anchor': 'middle', 'dominant-baseline': 'middle' });
+    t.textContent = ed.label;
+    g.appendChild(t);
+  }
+  return g;
+}
+
+/* ---------- Overlay ---------- */
+const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+function handlePos(n, h) {
+  const { x, y, w, h: hh } = n;
+  switch (h) {
+    case 'nw': return { x, y };
+    case 'n':  return { x: x + w / 2, y };
+    case 'ne': return { x: x + w, y };
+    case 'e':  return { x: x + w, y: y + hh / 2 };
+    case 'se': return { x: x + w, y: y + hh };
+    case 's':  return { x: x + w / 2, y: y + hh };
+    case 'sw': return { x, y: y + hh };
+    case 'w':  return { x, y: y + hh / 2 };
+  }
+  return { x, y };
+}
+function drawOverlay() {
+  if (drag && drag.type === 'link') {
+    const a = getNode(drag.from);
+    if (a) {
+      const side = drag.fromSide === 'auto' ? 'right' : drag.fromSide;
+      const p1 = portPos(a, side);
+      const p2 = drag.cursor;
+      overlayLayer.appendChild(svgEl('path', {
+        d: `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`,
+        stroke: '#4f46e5', 'stroke-width': 2.5, fill: 'none',
+        'stroke-dasharray': '7 5', 'pointer-events': 'none', 'stroke-linecap': 'round'
+      }));
+      overlayLayer.appendChild(svgEl('circle', { cx: p1.x, cy: p1.y, r: 4, fill: '#4f46e5', 'pointer-events': 'none' }));
+      overlayLayer.appendChild(svgEl('circle', { cx: p2.x, cy: p2.y, r: 6, fill: '#4f46e5', opacity: .9, 'pointer-events': 'none' }));
+      overlayLayer.appendChild(svgEl('circle', { cx: p2.x, cy: p2.y, r: 11, fill: 'none', stroke: '#4f46e5', 'stroke-width': 1.5, opacity: .4, 'pointer-events': 'none' }));
+    }
+  }
+  if (drag && drag.type === 'rubber') {
+    const { x1, y1, x2, y2 } = drag.rect;
+    overlayLayer.appendChild(svgEl('rect', {
+      x: Math.min(x1, x2), y: Math.min(y1, y2),
+      width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
+      fill: 'rgba(79,70,229,.08)', stroke: '#4f46e5',
+      'stroke-width': 1 / view.k, 'stroke-dasharray': `${5 / view.k} ${4 / view.k}`,
+      'pointer-events': 'none'
+    }));
+  }
+  if (selected.nodes.size === 1 && selected.edges.size === 0 && !drag) {
+    const n = getNode([...selected.nodes][0]);
+    if (n && !n.locked) {
+      const s = 9 / view.k, sw = 1.6 / view.k;
+      HANDLES.forEach(h => {
+        const p = handlePos(n, h);
+        overlayLayer.appendChild(svgEl('rect', {
+          x: p.x - s / 2, y: p.y - s / 2, width: s, height: s,
+          rx: 2 / view.k, class: 'handle', 'data-handle': h, 'stroke-width': sw
+        }));
+      });
+    }
+  }
+}
+function updateGrid() {
+  const on = chkGrid.checked && view.k > 0.35;
+  canvasWrap.style.backgroundImage = on ? 'radial-gradient(circle,#d8ddea 1px,transparent 1px)' : 'none';
+  canvasWrap.style.backgroundSize = `${GRID * view.k}px ${GRID * view.k}px`;
+  canvasWrap.style.backgroundPosition = `${view.x}px ${view.y}px`;
+}
+
+/* ---------- MINIMAP ---------- */
+function drawMinimap() {
+  const W = minimap.clientWidth || 200;
+  const H = minimap.clientHeight || 140;
+  minimapSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  minimapSvg.textContent = '';
+
+  if (!nodes.length) {
+    const t = svgEl('text', {
+      x: W / 2, y: H / 2, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+      'font-size': 10, fill: '#b9c2d6'
+    });
+    t.textContent = 'Chưa có nội dung';
+    minimapSvg.appendChild(t);
+    return;
+  }
+
+  const b = contentBounds();
+  const pad = 12;
+  const s = Math.min((W - pad * 2) / b.w, (H - pad * 2) / b.h);
+  const ox = (W - b.w * s) / 2 - b.x * s;
+  const oy = (H - b.h * s) / 2 - b.y * s;
+
+  /* edges */
+  edges.forEach(e => {
+    const a = getNode(e.from), c = getNode(e.to);
+    if (!a || !c) return;
+    minimapSvg.appendChild(svgEl('line', {
+      x1: ox + (a.x + a.w / 2) * s, y1: oy + (a.y + a.h / 2) * s,
+      x2: ox + (c.x + c.w / 2) * s, y2: oy + (c.y + c.h / 2) * s,
+      stroke: e.color || '#7c869e', 'stroke-width': 1, opacity: .55
+    }));
+  });
+
+  /* nodes */
+  nodes.forEach(n => {
+    const isSel = selected.nodes.has(n.id);
+    minimapSvg.appendChild(svgEl('rect', {
+      x: ox + n.x * s, y: oy + n.y * s,
+      width: Math.max(2, n.w * s), height: Math.max(2, n.h * s),
+      rx: 1.5,
+      fill: isSel ? '#4f46e5' : (n.fill === 'transparent' ? '#e3e7f0' : n.fill),
+      stroke: isSel ? '#4f46e5' : (n.stroke || '#7c869e'),
+      'stroke-width': 0.8
+    }));
+  });
+
+  /* viewport rect */
+  const r = canvasWrap.getBoundingClientRect();
+  const vx1 = (0 - view.x) / view.k;
+  const vy1 = (0 - view.y) / view.k;
+  const vx2 = (r.width - view.x) / view.k;
+  const vy2 = (r.height - view.y) / view.k;
+  minimapSvg.appendChild(svgEl('rect', {
+    class: 'minimap-viewport',
+    x: ox + vx1 * s, y: oy + vy1 * s,
+    width: (vx2 - vx1) * s, height: (vy2 - vy1) * s,
+    rx: 2
+  }));
+}
+
+/* minimap interaction: click to center viewport */
+let minimapDrag = false;
+minimap.addEventListener('pointerdown', e => {
+  minimapDrag = true;
+  centerFromMinimap(e);
+  try { minimap.setPointerCapture(e.pointerId); } catch (_) {}
+});
+minimap.addEventListener('pointermove', e => { if (minimapDrag) centerFromMinimap(e); });
+minimap.addEventListener('pointerup', e => {
+  minimapDrag = false;
+  try { minimap.releasePointerCapture(e.pointerId); } catch (_) {}
+});
+function centerFromMinimap(e) {
+  if (!nodes.length) return;
+  const r = minimap.getBoundingClientRect();
+  const mx = (e.clientX - r.left), my = (e.clientY - r.top);
+  const W = r.width, H = r.height;
+  const b = contentBounds();
+  const pad = 12;
+  const s = Math.min((W - pad * 2) / b.w, (H - pad * 2) / b.h);
+  const ox = (W - b.w * s) / 2 - b.x * s;
+  const oy = (H - b.h * s) / 2 - b.y * s;
+  const wx = (mx - ox) / s;
+  const wy = (my - oy) / s;
+  const cw = canvasWrap.clientWidth, chh = canvasWrap.clientHeight;
+  view.x = cw / 2 - wx * view.k;
+  view.y = chh / 2 - wy * view.k;
+  render(true);
+}
+
+/* ---------- Coords ---------- */
+function toWorld(e) {
+  const r = canvasWrap.getBoundingClientRect();
+  return { x: (e.clientX - r.left - view.x) / view.k, y: (e.clientY - r.top - view.y) / view.k };
+}
+function centerWorld() {
+  const r = canvasWrap.getBoundingClientRect();
+  return { x: (r.width / 2 - view.x) / view.k, y: (r.height / 2 - view.y) / view.k };
+}
+
+/* ---------- History ---------- */
+let history = [], hIndex = -1;
+const snapshot = () => JSON.stringify({ nodes, edges });
+function pushHistory() {
+  const s = snapshot();
+  if (history[hIndex] === s) return;
+  history = history.slice(0, hIndex + 1);
+  history.push(s);
+  if (history.length > 150) history.shift();
+  hIndex = history.length - 1;
+  updateUndoButtons();
+  autoSave();
+}
+function applySnapshot(s) {
+  const d = JSON.parse(s);
+  nodes = d.nodes; edges = d.edges;
+  selected.nodes.clear(); selected.edges.clear();
+  render();
+}
+function undo() { if (hIndex > 0) { hIndex--; applySnapshot(history[hIndex]); updateUndoButtons(); } }
+function redo() { if (hIndex < history.length - 1) { hIndex++; applySnapshot(history[hIndex]); updateUndoButtons(); } }
+function updateUndoButtons() {
+  document.getElementById('btnUndo').disabled = hIndex <= 0;
+  document.getElementById('btnRedo').disabled = hIndex >= history.length - 1;
+}
+
+/* ---------- Node ops ---------- */
+function addNode(type, cx, cy, text) {
+  const s = SHAPES[type];
+  const n = {
+    id: uid(), type,
+    x: Math.round(cx - s.w / 2), y: Math.round(cy - s.h / 2),
+    w: s.w, h: s.h,
+    text: text !== undefined ? text : '',
+    fill: s.fill, stroke: s.stroke,
+    textColor: '#1e2433', fontSize: 14, strokeWidth: 2,
+    bold: false, italic: false,
+    hAlign: 'center', vAlign: 'middle',
+    locked: false
+  };
+  if (snapToGrid) { n.x = Math.round(n.x / GRID) * GRID; n.y = Math.round(n.y / GRID) * GRID; }
+  nodes.push(n);
+  return n;
+}
+function deleteSelection() {
+  if (!selected.nodes.size && !selected.edges.size) return;
+  const delNodes = new Set(selected.nodes);
+  edges = edges.filter(e => !delNodes.has(e.from) && !delNodes.has(e.to) && !selected.edges.has(e.id));
+  nodes = nodes.filter(n => !delNodes.has(n.id));
+  selected.nodes.clear(); selected.edges.clear();
+  render(); pushHistory();
+}
+function duplicateSelection() {
+  if (!selected.nodes.size) return;
+  const map = new Map();
+  const newIds = [];
+  [...selected.nodes].forEach(id => {
+    const n = getNode(id);
+    if (!n) return;
+    const c = JSON.parse(JSON.stringify(n));
+    c.id = uid(); c.x += 32; c.y += 32;
+    map.set(id, c.id);
+    nodes.push(c); newIds.push(c.id);
+  });
+  edges.filter(e => map.has(e.from) && map.has(e.to)).forEach(e => {
+    edges.push({ ...e, id: uid(), from: map.get(e.from), to: map.get(e.to) });
+  });
+  selected.nodes.clear();
+  newIds.forEach(i => selected.nodes.add(i));
+  render(); pushHistory();
+}
+function selectAll() {
+  selected.nodes.clear(); selected.edges.clear();
+  nodes.forEach(n => selected.nodes.add(n.id));
+  render();
+}
+function clearSelection() { selected.nodes.clear(); selected.edges.clear(); }
+
+function copySelection() {
+  if (!selected.nodes.size) return;
+  clipboard = {
+    nodes: [...selected.nodes].map(id => JSON.parse(JSON.stringify(getNode(id)))),
+    edges: edges.filter(e => selected.nodes.has(e.from) && selected.nodes.has(e.to)).map(e => JSON.parse(JSON.stringify(e)))
+  };
+  flashIndicator(`Đã sao chép ${clipboard.nodes.length} hình`);
+}
+function pasteClipboard() {
+  if (!clipboard || !clipboard.nodes.length) return;
+  const idMap = new Map();
+  const newIds = [];
+  clipboard.nodes.forEach(n => {
+    const c = JSON.parse(JSON.stringify(n));
+    c.id = uid(); c.x += 40; c.y += 40;
+    idMap.set(n.id, c.id);
+    nodes.push(c); newIds.push(c.id);
+  });
+  clipboard.edges.forEach(e => {
+    edges.push({ ...e, id: uid(), from: idMap.get(e.from), to: idMap.get(e.to) });
+  });
+  clipboard.nodes.forEach(n => { n.x += 40; n.y += 40; });
+  clearSelection();
+  newIds.forEach(id => selected.nodes.add(id));
+  render(); pushHistory();
+}
+
+/* z-order */
+function bringToFront(ids) {
+  const set = new Set(ids);
+  const moved = nodes.filter(n => set.has(n.id));
+  nodes = nodes.filter(n => !set.has(n.id)).concat(moved);
+  render(); pushHistory();
+}
+function sendToBack(ids) {
+  const set = new Set(ids);
+  const moved = nodes.filter(n => set.has(n.id));
+  nodes = moved.concat(nodes.filter(n => !set.has(n.id)));
+  render(); pushHistory();
+}
+function bringForward(ids) {
+  const set = new Set(ids);
+  for (let i = nodes.length - 2; i >= 0; i--) {
+    if (set.has(nodes[i].id) && !set.has(nodes[i + 1].id)) [nodes[i], nodes[i + 1]] = [nodes[i + 1], nodes[i]];
+  }
+  render(); pushHistory();
+}
+function sendBackward(ids) {
+  const set = new Set(ids);
+  for (let i = 1; i < nodes.length; i++) {
+    if (set.has(nodes[i].id) && !set.has(nodes[i - 1].id)) [nodes[i], nodes[i - 1]] = [nodes[i - 1], nodes[i]];
+  }
+  render(); pushHistory();
+}
+
+/* alignment */
+function alignNodes(mode) {
+  const sel = [...selected.nodes].map(getNode).filter(Boolean);
+  if (sel.length < 2) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  let sumCx = 0, sumCy = 0;
+  sel.forEach(n => {
+    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x + n.w);
+    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y + n.h);
+    sumCx += n.x + n.w / 2; sumCy += n.y + n.h / 2;
+  });
+  const cx = sumCx / sel.length, cy = sumCy / sel.length;
+  switch (mode) {
+    case 'left': sel.forEach(n => n.x = minX); break;
+    case 'hcenter': sel.forEach(n => n.x = cx - n.w / 2); break;
+    case 'right': sel.forEach(n => n.x = maxX - n.w); break;
+    case 'top': sel.forEach(n => n.y = minY); break;
+    case 'vcenter': sel.forEach(n => n.y = cy - n.h / 2); break;
+    case 'bottom': sel.forEach(n => n.y = maxY - n.h); break;
+    case 'distH': {
+      if (sel.length < 3) return;
+      const sorted = [...sel].sort((a, b) => a.x - b.x);
+      const totalW = sorted.reduce((s, n) => s + n.w, 0);
+      const span = maxX - minX;
+      const gap = (span - totalW) / (sorted.length - 1);
+      let x = minX;
+      sorted.forEach(n => { n.x = x; x += n.w + gap; });
+      break;
+    }
+    case 'distV': {
+      if (sel.length < 3) return;
+      const sorted = [...sel].sort((a, b) => a.y - b.y);
+      const totalH = sorted.reduce((s, n) => s + n.h, 0);
+      const span = maxY - minY;
+      const gap = (span - totalH) / (sorted.length - 1);
+      let y = minY;
+      sorted.forEach(n => { n.y = y; y += n.h + gap; });
+      break;
+    }
+  }
+  render(); pushHistory();
+}
+
+/* ==================================================================
+   POINTER
+   ================================================================== */
+svg.addEventListener('pointerdown', onPointerDown);
+svg.addEventListener('pointermove', onPointerMove);
+svg.addEventListener('pointerup', onPointerUp);
+svg.addEventListener('pointercancel', onPointerUp);
+
+function closestOf(t, sel) { return (t && t.closest) ? t.closest(sel) : null; }
+
+function onPointerDown(e) {
+  if (e.button === 2) return;
+  const t = e.target;
+  const handleEl = closestOf(t, '.handle');
+  const portEl = closestOf(t, '.port');
+  const nodeEl = closestOf(t, '.node');
+  const edgeEl = closestOf(t, '.edge');
+  const isEmpty = !handleEl && !portEl && !nodeEl && !edgeEl;
+  const wantPan = (e.button === 1) || (e.button === 0 && spaceDown) ||
+                  (e.button === 0 && isEmpty && !e.shiftKey);
+
+  if (wantPan) {
+    e.preventDefault();
+    drag = { type: 'pan', sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y };
+    svg.classList.add('panning');
+    safeCapture(e.pointerId);
+    return;
+  }
+  if (handleEl) {
+    e.preventDefault();
+    const n = getNode([...selected.nodes][0]);
+    if (!n || n.locked) return;
+    drag = {
+      type: 'resize', handle: handleEl.dataset.handle, id: n.id,
+      orig: { x: n.x, y: n.y, w: n.w, h: n.h }, start: toWorld(e), moved: false
+    };
+    safeCapture(e.pointerId);
+    return;
+  }
+  if (portEl) {
+    e.preventDefault();
+    const fromId = portEl.dataset.node;
+    const fromSide = portEl.dataset.side;
+    const srcNode = getNode(fromId);
+    if (!srcNode || srcNode.locked) return;
+    drag = { type: 'link', from: fromId, fromSide, cursor: toWorld(e) };
+    linkTargetId = null;
+    svg.classList.add('linking');
+    safeCapture(e.pointerId);
+    render(true);
+    return;
+  }
+  if (nodeEl) {
+    e.preventDefault();
+    const id = nodeEl.dataset.id;
+    if (e.shiftKey) {
+      if (selected.nodes.has(id)) selected.nodes.delete(id);
+      else selected.nodes.add(id);
+    } else if (!selected.nodes.has(id)) {
+      clearSelection();
+      selected.nodes.add(id);
+    }
+    selected.edges.clear();
+    render();
+    /* Alt+drag = duplicate */
+    if (e.altKey && selected.nodes.size) {
+      duplicateSelection();
+    }
+    drag = {
+      type: 'node', start: toWorld(e), moved: false,
+      origins: [...selected.nodes].map(i => { const n = getNode(i); return { id: i, x: n.x, y: n.y }; })
+    };
+    safeCapture(e.pointerId);
+    return;
+  }
+  if (edgeEl) {
+    e.preventDefault();
+    const id = edgeEl.dataset.id;
+    if (!e.shiftKey) clearSelection();
+    selected.edges.add(id);
+    selected.nodes.clear();
+    render();
+    return;
+  }
+  if (e.button === 0 && isEmpty && e.shiftKey) {
+    const p = toWorld(e);
+    drag = { type: 'rubber', rect: { x1: p.x, y1: p.y, x2: p.x, y2: p.y }, additive: false };
+    safeCapture(e.pointerId);
+    render();
+  }
+}
+function safeCapture(pointerId) { try { svg.setPointerCapture(pointerId); } catch (_) {} }
+
+function onPointerMove(e) {
+  if (!drag) return;
+  if (drag.type === 'pan') {
+    view.x = drag.ox + (e.clientX - drag.sx);
+    view.y = drag.oy + (e.clientY - drag.sy);
+    render(true);
+    return;
+  }
+  const p = toWorld(e);
+  if (drag.type === 'node') {
+    drag.moved = true;
+    const dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+    drag.origins.forEach(o => {
+      const n = getNode(o.id);
+      if (!n || n.locked) return;
+      let nx = o.x + dx, ny = o.y + dy;
+      if (snapToGrid) { nx = Math.round(nx / GRID) * GRID; ny = Math.round(ny / GRID) * GRID; }
+      n.x = nx; n.y = ny;
+    });
+    render(true);
+    return;
+  }
+  if (drag.type === 'resize') {
+    drag.moved = true;
+    const n = getNode(drag.id);
+    if (!n) return;
+    const dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+    const o = drag.orig;
+    let x = o.x, y = o.y, w = o.w, h = o.h;
+    if (drag.handle.includes('e')) w = Math.max(44, o.w + dx);
+    if (drag.handle.includes('s')) h = Math.max(34, o.h + dy);
+    if (drag.handle.includes('w')) { w = Math.max(44, o.w - dx); x = o.x + (o.w - w); }
+    if (drag.handle.includes('n')) { h = Math.max(34, o.h - dy); y = o.y + (o.h - h); }
+    if (snapToGrid) {
+      x = Math.round(x / GRID) * GRID; y = Math.round(y / GRID) * GRID;
+      w = Math.round(w / GRID) * GRID; h = Math.round(h / GRID) * GRID;
+    }
+    Object.assign(n, { x, y, w, h });
+    render(true);
+    return;
+  }
+  if (drag.type === 'link') {
+    drag.cursor = p;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const tgt = el && el.closest ? el.closest('.node') : null;
+    const target = (tgt && tgt.dataset.id !== drag.from) ? tgt.dataset.id : null;
+    linkTargetId = target;
+    render(true);
+    return;
+  }
+  if (drag.type === 'rubber') {
+    drag.rect.x2 = p.x; drag.rect.y2 = p.y;
+    render(true);
+    return;
+  }
+}
+
+function onPointerUp(e) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  svg.classList.remove('panning', 'linking');
+  try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+
+  if (d.type === 'node' || d.type === 'resize') {
+    if (d.moved) pushHistory();
+    render();
+    return;
+  }
+  if (d.type === 'link') {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const tgtNode = el && el.closest ? el.closest('.node') : null;
+    const tgtPort = el && el.closest ? el.closest('.port') : null;
+    let targetId = null, targetSide = 'auto';
+    if (tgtPort) { targetId = tgtPort.dataset.node; targetSide = tgtPort.dataset.side; }
+    else if (tgtNode) { targetId = tgtNode.dataset.id; }
+    linkTargetId = null;
+    if (targetId && targetId !== d.from) {
+      addEdge(d.from, targetId, d.fromSide, targetSide);
+      pushHistory();
+    } else if (!targetId) {
+      const src = getNode(d.from);
+      const p = d.cursor;
+      const srcPort = portPos(src, d.fromSide === 'auto' ? 'right' : d.fromSide);
+      const dist = Math.hypot(p.x - srcPort.x, p.y - srcPort.y);
+      if (dist > 30) {
+        const nn = addNode('rect', p.x, p.y);
+        if (snapToGrid) { nn.x = Math.round(nn.x / GRID) * GRID; nn.y = Math.round(nn.y / GRID) * GRID; }
+        addEdge(d.from, nn.id, d.fromSide, 'auto');
+        clearSelection();
+        selected.nodes.add(nn.id);
+        pushHistory();
+      }
+    }
+    render();
+    return;
+  }
+  if (d.type === 'rubber') {
+    const { x1, y1, x2, y2 } = d.rect;
+    const rx1 = Math.min(x1, x2), rx2 = Math.max(x1, x2);
+    const ry1 = Math.min(y1, y2), ry2 = Math.max(y1, y2);
+    if (rx2 - rx1 > 4 || ry2 - ry1 > 4) {
+      if (!d.additive) clearSelection();
+      nodes.forEach(n => {
+        if (n.x < rx2 && n.x + n.w > rx1 && n.y < ry2 && n.y + n.h > ry1) selected.nodes.add(n.id);
+      });
+    }
+    render();
+    return;
+  }
+  render();
+}
+
+function addEdge(from, to, fromSide, toSide) {
+  if (from === to) return;
+  const dup = edges.find(e => e.from === from && e.to === to &&
+    (e.fromSide || 'auto') === (fromSide || 'auto') &&
+    (e.toSide || 'auto') === (toSide || 'auto'));
+  if (dup) return;
+  edges.push({
+    id: uid(), from, to,
+    fromSide: fromSide || 'auto', toSide: toSide || 'auto',
+    label: '', color: '#7c869e', width: 2, dashed: false,
+    arrowEnd: true, arrowStart: false, routing: 'curve'
+  });
+}
+
+/* ---------- Double-click ---------- */
+svg.addEventListener('dblclick', e => {
+  const nodeEl = closestOf(e.target, '.node');
+  if (nodeEl) {
+    const n = getNode(nodeEl.dataset.id);
+    if (n && !n.locked) startTextEdit(n);
+    return;
+  }
+  const edgeEl = closestOf(e.target, '.edge');
+  if (edgeEl) {
+    const ed = getEdge(edgeEl.dataset.id);
+    if (ed) {
+      const v = prompt('Nhãn cho đường nối:', ed.label || '');
+      if (v !== null) { ed.label = v; render(); pushHistory(); }
+    }
+    return;
+  }
+  const p = toWorld(e);
+  const n = addNode('rect', p.x, p.y);
+  clearSelection();
+  selected.nodes.add(n.id);
+  render(); pushHistory();
+});
+
+function startTextEdit(n) {
+  const ta = document.createElement('textarea');
+  ta.className = 'node-editor';
+  ta.value = n.text;
+  ta.placeholder = 'Nhập…';
+  const sx = view.x + n.x * view.k;
+  const sy = view.y + n.y * view.k;
+  ta.style.left = sx + 'px';
+  ta.style.top = sy + 'px';
+  ta.style.width = Math.max(70, n.w * view.k) + 'px';
+  ta.style.height = Math.max(34, n.h * view.k) + 'px';
+  ta.style.fontSize = Math.max(10, (n.fontSize || 14) * view.k) + 'px';
+  if (n.bold) ta.style.fontWeight = '700';
+  if (n.italic) ta.style.fontStyle = 'italic';
+  canvasWrap.appendChild(ta);
+  ta.focus(); ta.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    n.text = ta.value;
+    ta.remove();
+    render(); pushHistory();
+  };
+  ta.addEventListener('blur', commit);
+  ta.addEventListener('keydown', ev => {
+    ev.stopPropagation();
+    if (ev.key === 'Escape') { done = true; ta.remove(); render(); }
+    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); commit(); }
+  });
+}
+
+/* ---------- Wheel zoom ---------- */
+canvasWrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = canvasWrap.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const oldK = view.k;
+  const factor = Math.exp(-e.deltaY * 0.0016);
+  const k = clamp(oldK * factor, 0.12, 4);
+  view.x = mx - (mx - view.x) * (k / oldK);
+  view.y = my - (my - view.y) * (k / oldK);
+  view.k = k;
+  render(true);
+}, { passive: false });
+
+/* ==================================================================
+   CONTEXT MENU
+   ================================================================== */
+function hideCtxMenu() { ctxMenu.classList.remove('show'); ctxMenu.innerHTML = ''; }
+document.addEventListener('pointerdown', e => { if (!ctxMenu.contains(e.target)) hideCtxMenu(); }, true);
+svg.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const t = e.target;
+  const nodeEl = closestOf(t, '.node');
+  const edgeEl = closestOf(t, '.edge');
+  if (nodeEl) openNodeCtx(e, nodeEl.dataset.id);
+  else if (edgeEl) openEdgeCtx(e, edgeEl.dataset.id);
+  else openCanvasCtx(e);
+});
+
+function buildCtx(items) {
+  ctxMenu.innerHTML = '';
+  items.forEach(it => {
+    if (!it) return;
+    if (it.type === 'sep') {
+      const d = document.createElement('div');
+      d.className = 'ctx-sep';
+      ctxMenu.appendChild(d);
+      return;
+    }
+    if (it.type === 'header') {
+      const h = document.createElement('div');
+      h.className = 'ctx-header';
+      h.textContent = it.label;
+      ctxMenu.appendChild(h);
+      return;
+    }
+    if (it.type === 'swatches') {
+      const row = document.createElement('div');
+      row.className = 'ctx-swatches';
+      it.colors.forEach(c => {
+        const sw = document.createElement('div');
+        sw.className = 'sw';
+        if (typeof c === 'object') sw.style.background = `linear-gradient(135deg, ${c.fill} 55%, ${c.stroke} 55%)`;
+        else sw.style.background = c;
+        sw.addEventListener('click', () => { it.onPick(c); hideCtxMenu(); });
+        row.appendChild(sw);
+      });
+      ctxMenu.appendChild(row);
+      return;
+    }
+    if (it.type === 'shapes') {
+      const grid = document.createElement('div');
+      grid.className = 'ctx-shapes';
+      Object.entries(SHAPES).forEach(([k, v]) => {
+        const el = document.createElement('div');
+        el.className = 'ctx-shape';
+        el.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="14">${
+          shapePaths(k, 1, 1, 22, 12).map((d, i) =>
+            `<path d="${d}" fill="${i === 0 && v.fill !== 'transparent' ? v.fill : 'none'}" stroke="${v.stroke}" stroke-width="1.4" stroke-linejoin="round"/>`
+          ).join('')
+        }</svg><span>${v.label}</span>`;
+        el.addEventListener('click', () => { it.onPick(k); hideCtxMenu(); });
+        grid.appendChild(el);
+      });
+      ctxMenu.appendChild(grid);
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '');
+    row.innerHTML = `<span class="icon">${it.icon || ''}</span><span>${it.label}</span>${
+      it.kbd ? `<span class="kbd">${it.kbd}</span>` : ''}`;
+    row.addEventListener('click', () => { if (it.action) it.action(); hideCtxMenu(); });
+    ctxMenu.appendChild(row);
+  });
+  ctxMenu.classList.add('show');
+  const r = ctxMenu.getBoundingClientRect();
+  const px = Math.min(e.clientX, window.innerWidth - r.width - 8);
+  const py = Math.min(e.clientY, window.innerHeight - r.height - 8);
+  ctxMenu.style.left = Math.max(8, px) + 'px';
+  ctxMenu.style.top = Math.max(8, py) + 'px';
+}
+
+function openNodeCtx(e, id) {
+  if (!selected.nodes.has(id)) {
+    clearSelection();
+    selected.nodes.add(id);
+    render();
+  }
+  const n = getNode(id);
+  const ids = [...selected.nodes];
+  const items = [
+    { icon: '✎', label: 'Sửa văn bản', kbd: 'Dbl-click', action: () => startTextEdit(n) },
+    { icon: '⎘', label: 'Nhân bản', kbd: 'Ctrl+D', action: duplicateSelection },
+    { icon: '⧉', label: 'Sao chép', kbd: 'Ctrl+C', action: copySelection },
+    { icon: n.locked ? '🔓' : '🔒', label: n.locked ? 'Mở khoá' : 'Khoá hình', action: () => {
+      ids.forEach(i => { const nn = getNode(i); if (nn) nn.locked = !nn.locked; });
+      render(); pushHistory();
+    }},
+    { type: 'sep' },
+    { type: 'header', label: 'Đổi hình dạng' },
+    { type: 'shapes', onPick: k => {
+      ids.forEach(i => { const nn = getNode(i); if (nn) nn.type = k; });
+      render(); pushHistory();
+    }},
+    { type: 'header', label: 'Màu sắc' },
+    { type: 'swatches', colors: COLOR_PAIRS, onPick: c => {
+      ids.forEach(i => { const nn = getNode(i); if (nn) { nn.fill = c.fill; nn.stroke = c.stroke; } });
+      render(); pushHistory();
+    }},
+    { type: 'sep' },
+    { icon: '⤒', label: 'Đưa lên trên cùng', action: () => bringToFront(ids) },
+    { icon: '↑', label: 'Lên một lớp', action: () => bringForward(ids) },
+    { icon: '↓', label: 'Xuống một lớp', action: () => sendBackward(ids) },
+    { icon: '⤓', label: 'Đưa xuống dưới cùng', action: () => sendToBack(ids) },
+    { type: 'sep' },
+    { icon: '✕', label: 'Xoá', kbd: 'Del', danger: true, action: deleteSelection },
+  ];
+  if (ids.length > 1) {
+    items.length = 0;
+    items.push(
+      { type: 'header', label: `Đã chọn ${ids.length} hình` },
+      { icon: '⎘', label: 'Nhân bản', kbd: 'Ctrl+D', action: duplicateSelection },
+      { icon: '⧉', label: 'Sao chép', kbd: 'Ctrl+C', action: copySelection },
+      { icon: '🔒', label: 'Khoá / Mở khoá', action: () => {
+        const anyUnlocked = ids.some(i => { const nn = getNode(i); return nn && !nn.locked; });
+        ids.forEach(i => { const nn = getNode(i); if (nn) nn.locked = anyUnlocked; });
+        render(); pushHistory();
+      }},
+      { type: 'sep' },
+      { type: 'header', label: 'Màu sắc' },
+      { type: 'swatches', colors: COLOR_PAIRS, onPick: c => {
+        ids.forEach(i => { const nn = getNode(i); if (nn) { nn.fill = c.fill; nn.stroke = c.stroke; } });
+        render(); pushHistory();
+      }},
+      { type: 'sep' },
+      { type: 'header', label: 'Căn chỉnh' },
+      { icon: '⇤', label: 'Căn trái', action: () => alignNodes('left') },
+      { icon: '↔', label: 'Căn giữa ngang', action: () => alignNodes('hcenter') },
+      { icon: '⇥', label: 'Căn phải', action: () => alignNodes('right') },
+      { icon: '⇡', label: 'Căn trên', action: () => alignNodes('top') },
+      { icon: '↕', label: 'Căn giữa dọc', action: () => alignNodes('vcenter') },
+      { icon: '⇣', label: 'Căn dưới', action: () => alignNodes('bottom') },
+      { icon: '⇹', label: 'Phân bố ngang', action: () => alignNodes('distH') },
+      { icon: '⇳', label: 'Phân bố dọc', action: () => alignNodes('distV') },
+      { type: 'sep' },
+      { icon: '✕', label: 'Xoá tất cả', kbd: 'Del', danger: true, action: deleteSelection },
+    );
+  }
+  buildCtx(items);
+}
+
+function openEdgeCtx(e, id) {
+  if (!selected.edges.has(id)) {
+    clearSelection();
+    selected.edges.add(id);
+    render();
+  }
+  const ed = getEdge(id);
+  buildCtx([
+    { icon: '🏷', label: ed.label ? 'Sửa nhãn' : 'Thêm nhãn', action: () => {
+      const v = prompt('Nhãn cho đường nối:', ed.label || '');
+      if (v !== null) { ed.label = v; render(); pushHistory(); }
+    }},
+    { type: 'sep' },
+    { type: 'header', label: 'Định tuyến' },
+    { icon: '〜', label: 'Cong', action: () => { ed.routing = 'curve'; render(); pushHistory(); } },
+    { icon: '╱', label: 'Thẳng', action: () => { ed.routing = 'straight'; render(); pushHistory(); } },
+    { icon: '⌐', label: 'Gấp khúc', action: () => { ed.routing = 'orthogonal'; render(); pushHistory(); } },
+    { type: 'sep' },
+    { type: 'header', label: 'Kiểu nét' },
+    { icon: '━', label: 'Nét liền', action: () => { ed.dashed = false; render(); pushHistory(); } },
+    { icon: '┅', label: 'Nét đứt', action: () => { ed.dashed = true; render(); pushHistory(); } },
+    { type: 'sep' },
+    { type: 'header', label: 'Mũi tên' },
+    { icon: '→', label: 'Mũi tên cuối', action: () => { ed.arrowEnd = true; ed.arrowStart = false; render(); pushHistory(); } },
+    { icon: '←', label: 'Mũi tên đầu', action: () => { ed.arrowEnd = false; ed.arrowStart = true; render(); pushHistory(); } },
+    { icon: '↔', label: 'Cả hai đầu', action: () => { ed.arrowEnd = true; ed.arrowStart = true; render(); pushHistory(); } },
+    { icon: '—', label: 'Không mũi tên', action: () => { ed.arrowEnd = false; ed.arrowStart = false; render(); pushHistory(); } },
+    { type: 'sep' },
+    { type: 'header', label: 'Màu đường' },
+    { type: 'swatches', colors: EDGE_COLORS, onPick: c => { ed.color = c; render(); pushHistory(); }},
+    { type: 'sep' },
+    { icon: '✕', label: 'Xoá đường nối', kbd: 'Del', danger: true, action: deleteSelection },
+  ]);
+}
+
+function openCanvasCtx(e) {
+  const items = [];
+  if (clipboard && clipboard.nodes.length) {
+    items.push({ icon: '⎘', label: `Dán (${clipboard.nodes.length} hình)`, kbd: 'Ctrl+V', action: pasteClipboard });
+    items.push({ type: 'sep' });
+  }
+  const p = toWorld(e);
+  items.push(
+    { type: 'header', label: 'Thêm hình' },
+    { type: 'shapes', onPick: k => {
+      const n = addNode(k, p.x, p.y);
+      clearSelection();
+      selected.nodes.add(n.id);
+      render(); pushHistory();
+    }},
+    { type: 'sep' },
+    { icon: '⛶', label: 'Chọn tất cả', kbd: 'Ctrl+A', action: selectAll },
+    { icon: '⌖', label: 'Vừa khung', kbd: 'Ctrl+0', action: fitView },
+    { icon: '⊕', label: 'Zoom 100%', action: () => { view.k = 1; render(); } },
+    { type: 'sep' },
+    { icon: '🔍', label: 'Tìm kiếm', kbd: 'Ctrl+F', action: openSearch },
+    { icon: '▦', label: chkGrid.checked ? 'Tắt lưới' : 'Bật lưới', action: () => {
+      chkGrid.checked = !chkGrid.checked; updateGrid();
+    }},
+    { icon: '⌗', label: chkSnap.checked ? 'Tắt bám lưới' : 'Bật bám lưới', action: () => {
+      chkSnap.checked = !chkSnap.checked; snapToGrid = chkSnap.checked;
+    }},
+  );
+  buildCtx(items);
+}
+
+/* ==================================================================
+   KEYBOARD
+   ================================================================== */
+window.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  if (e.code === 'Space') { spaceDown = true; e.preventDefault(); return; }
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (ctrl && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+  if (ctrl && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+  if (ctrl && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelection(); return; }
+  if (ctrl && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAll(); return; }
+  if (ctrl && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelection(); return; }
+  if (ctrl && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteClipboard(); return; }
+  if (ctrl && e.key.toLowerCase() === 'f') { e.preventDefault(); openSearch(); return; }
+  if (ctrl && e.key.toLowerCase() === 's') { e.preventDefault(); saveJSON(); return; }
+  if (ctrl && e.key === '0') { e.preventDefault(); fitView(); return; }
+
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelection(); return; }
+  if (e.key === 'Escape') { closeSearch(); clearSelection(); hideCtxMenu(); render(); return; }
+  if (e.key === '?') { e.preventDefault(); openHelp(); return; }
+
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selected.nodes.size) {
+    e.preventDefault();
+    const step = e.shiftKey ? 1 : (snapToGrid ? GRID : 10);
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    selected.nodes.forEach(id => {
+      const n = getNode(id);
+      if (n && !n.locked) { n.x += dx; n.y += dy; }
+    });
+    render(true);
+    clearTimeout(window.__nudgeTimer);
+    window.__nudgeTimer = setTimeout(pushHistory, 400);
+  }
+});
+window.addEventListener('keyup', e => { if (e.code === 'Space') spaceDown = false; });
+
+let indicatorTimer = null;
+function flashIndicator(text) {
+  modeIndicator.textContent = text;
+  modeIndicator.classList.add('show');
+  clearTimeout(indicatorTimer);
+  indicatorTimer = setTimeout(() => modeIndicator.classList.remove('show'), 1400);
+}
+
+/* ==================================================================
+   SEARCH
+   ================================================================== */
+function openSearch() {
+  searchPanel.classList.add('show');
+  searchInput.value = '';
+  renderSearchResults('');
+  setTimeout(() => searchInput.focus(), 30);
+}
+function closeSearch() { searchPanel.classList.remove('show'); }
+function renderSearchResults(q) {
+  q = q.trim().toLowerCase();
+  searchResults.innerHTML = '';
+  if (!q) {
+    searchResults.innerHTML = `<div class="search-empty">Nhập nội dung để tìm trong ${nodes.length} hình</div>`;
+    return;
+  }
+  const matches = nodes.filter(n => (n.text || '').toLowerCase().includes(q));
+  if (!matches.length) {
+    searchResults.innerHTML = `<div class="search-empty">Không tìm thấy hình nào</div>`;
+    return;
+  }
+  matches.slice(0, 30).forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'search-result';
+    const label = n.text || `(${SHAPES[n.type]?.label || n.type})`;
+    el.innerHTML = `<span class="dot" style="background:${n.fill === 'transparent' ? '#e3e7f0' : n.fill};border:1px solid ${n.stroke}"></span>
+      <span>${esc(label.slice(0, 60))}</span>
+      <span class="meta">${SHAPES[n.type]?.label || n.type}</span>`;
+    el.addEventListener('click', () => {
+      clearSelection();
+      selected.nodes.add(n.id);
+      centerOnNode(n);
+      render();
+      closeSearch();
+    });
+    searchResults.appendChild(el);
+  });
+}
+function centerOnNode(n) {
+  const cw = canvasWrap.clientWidth, chh = canvasWrap.clientHeight;
+  view.x = cw / 2 - (n.x + n.w / 2) * view.k;
+  view.y = chh / 2 - (n.y + n.h / 2) * view.k;
+}
+searchInput.addEventListener('input', e => renderSearchResults(e.target.value));
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSearch();
+  if (e.key === 'Enter') {
+    const first = searchResults.querySelector('.search-result');
+    if (first) first.click();
+  }
+});
+
+/* ==================================================================
+   HELP MODAL
+   ================================================================== */
+function openHelp() {
+  if (!helpBody.innerHTML) {
+    helpBody.innerHTML = `
+      <div class="shortcut-section">
+        <h3>Điều khiển canvas</h3>
+        <div class="shortcut-row"><span>Di chuyển canvas</span><span><kbd>Chuột trái</kbd> kéo · <kbd>Space</kbd>+kéo · <kbd>Chuột giữa</kbd></span></div>
+        <div class="shortcut-row"><span>Chọn vùng</span><span><kbd>Shift</kbd>+kéo chuột trái</span></div>
+        <div class="shortcut-row"><span>Thu phóng</span><span>Lăn chuột · <kbd>Ctrl</kbd>+<kbd>0</kbd> vừa khung</span></div>
+        <div class="shortcut-row"><span>Menu tuỳ chỉnh</span><span><kbd>Chuột phải</kbd></span></div>
+      </div>
+      <div class="shortcut-section">
+        <h3>Tạo & chỉnh sửa</h3>
+        <div class="shortcut-row"><span>Tạo hình nhanh</span><span>Nhấn đúp canvas</span></div>
+        <div class="shortcut-row"><span>Sửa văn bản</span><span>Nhấn đúp hình</span></div>
+        <div class="shortcut-row"><span>Nối hình</span><span>Kéo chấm tròn ở cạnh hình</span></div>
+        <div class="shortcut-row"><span>Tạo hình + nối</span><span>Kéo dây ra vùng trống</span></div>
+        <div class="shortcut-row"><span>Nhân bản nhanh</span><span><kbd>Alt</kbd>+kéo hình</span></div>
+      </div>
+      <div class="shortcut-section">
+        <h3>Bàn phím</h3>
+        <div class="shortcut-row"><span>Hoàn tác / Làm lại</span><span><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></span></div>
+        <div class="shortcut-row"><span>Sao chép / Dán</span><span><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></span></div>
+        <div class="shortcut-row"><span>Nhân bản</span><span><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
+        <div class="shortcut-row"><span>Chọn tất cả</span><span><kbd>Ctrl</kbd>+<kbd>A</kbd></span></div>
+        <div class="shortcut-row"><span>Tìm kiếm</span><span><kbd>Ctrl</kbd>+<kbd>F</kbd></span></div>
+        <div class="shortcut-row"><span>Lưu file</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd></span></div>
+        <div class="shortcut-row"><span>Xoá</span><span><kbd>Del</kbd> / <kbd>Backspace</kbd></span></div>
+        <div class="shortcut-row"><span>Dịch chuyển hình</span><span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> (Shift: nhỏ)</span></div>
+        <div class="shortcut-row"><span>Bỏ chọn / Đóng</span><span><kbd>Esc</kbd></span></div>
+      </div>
+      <div class="shortcut-section">
+        <h3>Về Fwrt</h3>
+        <div style="font-size:12.5px;color:#64748b;line-height:1.65">
+          Fwrt là trình vẽ lưu đồ gọn nhẹ, chạy hoàn toàn trên trình duyệt.
+          Toàn bộ dữ liệu được lưu tự động vào máy bạn. Bạn có thể xuất PNG, SVG hoặc JSON.
+        </div>
+      </div>
+    `;
+  }
+  helpModal.classList.add('show');
+}
+function closeHelp() { helpModal.classList.remove('show'); }
+document.getElementById('helpClose').onclick = closeHelp;
+helpModal.addEventListener('click', e => { if (e.target === helpModal) closeHelp(); });
+document.getElementById('btnHelp').onclick = openHelp;
+
+/* ==================================================================
+   INSPECTOR
+   ================================================================== */
+function updateInspector() {
+  const nodeSel = [...selected.nodes].map(getNode).filter(Boolean);
+  const edgeSel = [...selected.edges].map(getEdge).filter(Boolean);
+  if (nodeSel.length === 1) renderNodeInspector(nodeSel[0]);
+  else if (edgeSel.length === 1) renderEdgeInspector(edgeSel[0]);
+  else if (nodeSel.length > 1) renderMultiInspector(nodeSel);
+  else inspector.innerHTML = `
+    <div class="empty-state">
+      <span class="big">◈</span>
+      Chọn một hình hoặc đường nối<br>để chỉnh sửa thuộc tính.<br><br>
+      <span style="font-size:11.5px;line-height:1.7">
+        <b>Chuột phải</b> để mở menu tuỳ chỉnh<br>
+        <b>Ctrl+F</b> để tìm kiếm<br>
+        <b>?</b> để xem phím tắt
+      </span>
+    </div>`;
+}
+
+function renderNodeInspector(n) {
+  inspector.innerHTML = `
+    <div class="insp-title">Thuộc tính hình</div>
+    <label class="fld"><span>Nội dung</span>
+      <textarea id="i-text" rows="3" placeholder="Để trống nếu không cần chữ">${esc(n.text)}</textarea>
+    </label>
+    <div class="row2">
+      <button id="i-bold" style="width:100%;justify-content:center;font-weight:700;${n.bold ? 'background:#eef0ff;border-color:#4f46e5;color:#4f46e5' : ''}">B</button>
+      <button id="i-italic" style="width:100%;justify-content:center;font-style:italic;${n.italic ? 'background:#eef0ff;border-color:#4f46e5;color:#4f46e5' : ''}">I</button>
+    </div>
+    <div class="row2" style="margin-top:8px">
+      <label class="fld"><span>Căn ngang</span>
+        <select id="i-halign">
+          <option value="left" ${n.hAlign === 'left' ? 'selected' : ''}>Trái</option>
+          <option value="center" ${(n.hAlign || 'center') === 'center' ? 'selected' : ''}>Giữa</option>
+          <option value="right" ${n.hAlign === 'right' ? 'selected' : ''}>Phải</option>
+        </select>
+      </label>
+      <label class="fld"><span>Căn dọc</span>
+        <select id="i-valign">
+          <option value="top" ${n.vAlign === 'top' ? 'selected' : ''}>Trên</option>
+          <option value="middle" ${(n.vAlign || 'middle') === 'middle' ? 'selected' : ''}>Giữa</option>
+          <option value="bottom" ${n.vAlign === 'bottom' ? 'selected' : ''}>Dưới</option>
+        </select>
+      </label>
+    </div>
+    <label class="fld"><span>Loại hình</span>
+      <select id="i-shape">
+        ${GROUP_ORDER.map(gr => {
+          const opts = Object.entries(SHAPES).filter(([, v]) => v.group === gr);
+          return `<optgroup label="${gr}">${opts.map(([k, v]) =>
+            `<option value="${k}" ${k === n.type ? 'selected' : ''}>${v.label}</option>`).join('')}</optgroup>`;
+        }).join('')}
+      </select>
+    </label>
+    <div class="row2">
+      <label class="fld"><span>Rộng</span><input type="number" id="i-w" value="${Math.round(n.w)}" min="30"></label>
+      <label class="fld"><span>Cao</span><input type="number" id="i-h" value="${Math.round(n.h)}" min="24"></label>
+    </div>
+    <div class="row2">
+      <label class="fld"><span>X</span><input type="number" id="i-x" value="${Math.round(n.x)}"></label>
+      <label class="fld"><span>Y</span><input type="number" id="i-y" value="${Math.round(n.y)}"></label>
+    </div>
+    <div class="insp-title">Màu sắc</div>
+    <div class="swatch-row" id="i-swatches">
+      ${COLOR_PAIRS.map(c => `<div class="swatch" data-fill="${c.fill}" data-stroke="${c.stroke}"
+        style="background:linear-gradient(135deg, ${c.fill} 55%, ${c.stroke} 55%)"></div>`).join('')}
+    </div>
+    <div class="row2">
+      <label class="fld"><span>Nền</span><input type="color" id="i-fill" value="${n.fill === 'transparent' ? '#ffffff' : n.fill}"></label>
+      <label class="fld"><span>Viền</span><input type="color" id="i-stroke" value="${n.stroke}"></label>
+    </div>
+    <div class="row2">
+      <label class="fld"><span>Chữ</span><input type="color" id="i-textcolor" value="${n.textColor || '#1e2433'}"></label>
+      <label class="fld"><span>Cỡ chữ</span><input type="number" id="i-fs" value="${n.fontSize || 14}" min="8" max="48"></label>
+    </div>
+    <label class="fld"><span>Độ dày viền</span><input type="number" id="i-sw" value="${n.strokeWidth || 2}" min="0" max="12" step="0.5"></label>
+    <div class="insp-title">Lớp & Khoá</div>
+    <div class="align-grid">
+      <div class="align-btn" id="z-front" title="Lên trên cùng">⤒</div>
+      <div class="align-btn" id="z-fwd" title="Lên một lớp">↑</div>
+      <div class="align-btn" id="z-bwd" title="Xuống một lớp">↓</div>
+      <div class="align-btn" id="z-back" title="Xuống dưới cùng">⤓</div>
+    </div>
+    <button style="width:100%;justify-content:center;margin-bottom:6px" id="i-lock">${n.locked ? '🔓 Mở khoá' : '🔒 Khoá hình'}</button>
+    <div class="insp-title">Hành động</div>
+    <button style="width:100%;justify-content:center" id="i-dup">Nhân bản (Ctrl+D)</button>
+    <button class="danger" id="i-del">Xoá hình (Del)</button>
+  `;
+  const g = id => document.getElementById(id);
+  g('i-text').addEventListener('input', ev => { n.text = ev.target.value; render(true); });
+  g('i-text').addEventListener('change', pushHistory);
+  g('i-bold').onclick = () => { n.bold = !n.bold; render(); pushHistory(); };
+  g('i-italic').onclick = () => { n.italic = !n.italic; render(); pushHistory(); };
+  g('i-halign').onchange = ev => { n.hAlign = ev.target.value; render(); pushHistory(); };
+  g('i-valign').onchange = ev => { n.vAlign = ev.target.value; render(); pushHistory(); };
+  g('i-shape').addEventListener('change', ev => { n.type = ev.target.value; render(); pushHistory(); });
+  [['i-w', 'w', 30], ['i-h', 'h', 24], ['i-x', 'x', -1e5], ['i-y', 'y', -1e5]].forEach(([id, key, min]) => {
+    g(id).addEventListener('input', ev => {
+      const v = parseFloat(ev.target.value);
+      if (isNaN(v)) return;
+      n[key] = min >= 0 ? Math.max(min, v) : v;
+      render(true);
+    });
+    g(id).addEventListener('change', pushHistory);
+  });
+  g('i-fill').addEventListener('input', ev => { n.fill = ev.target.value; render(true); });
+  g('i-fill').addEventListener('change', pushHistory);
+  g('i-stroke').addEventListener('input', ev => { n.stroke = ev.target.value; render(true); });
+  g('i-stroke').addEventListener('change', pushHistory);
+  g('i-textcolor').addEventListener('input', ev => { n.textColor = ev.target.value; render(true); });
+  g('i-textcolor').addEventListener('change', pushHistory);
+  g('i-fs').addEventListener('input', ev => { n.fontSize = clamp(parseFloat(ev.target.value) || 14, 8, 48); render(true); });
+  g('i-fs').addEventListener('change', pushHistory);
+  g('i-sw').addEventListener('input', ev => { n.strokeWidth = clamp(parseFloat(ev.target.value) || 2, 0, 12); render(true); });
+  g('i-sw').addEventListener('change', pushHistory);
+  document.querySelectorAll('#i-swatches .swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      n.fill = sw.dataset.fill; n.stroke = sw.dataset.stroke;
+      g('i-fill').value = n.fill; g('i-stroke').value = n.stroke;
+      render(); pushHistory();
+    });
+  });
+  g('z-front').onclick = () => bringToFront([n.id]);
+  g('z-fwd').onclick = () => bringForward([n.id]);
+  g('z-bwd').onclick = () => sendBackward([n.id]);
+  g('z-back').onclick = () => sendToBack([n.id]);
+  g('i-lock').onclick = () => { n.locked = !n.locked; render(); pushHistory(); };
+  g('i-dup').onclick = duplicateSelection;
+  g('i-del').onclick = deleteSelection;
+}
+
+function renderMultiInspector(sel) {
+  inspector.innerHTML = `
+    <div class="insp-title">Đã chọn ${sel.length} hình</div>
+    <div class="align-grid">
+      <div class="align-btn" id="a-left" title="Căn trái">⇤</div>
+      <div class="align-btn" id="a-hc" title="Căn giữa ngang">↔</div>
+      <div class="align-btn" id="a-right" title="Căn phải">⇥</div>
+      <div class="align-btn" id="a-top" title="Căn trên">⇡</div>
+      <div class="align-btn" id="a-vc" title="Căn giữa dọc">↕</div>
+      <div class="align-btn" id="a-bottom" title="Căn dưới">⇣</div>
+    </div>
+    <div class="align-grid" style="grid-template-columns:1fr 1fr">
+      <div class="align-btn" id="a-dh">⇹ Phân bố ngang</div>
+      <div class="align-btn" id="a-dv">⇳ Phân bố dọc</div>
+    </div>
+    <div class="insp-title">Màu sắc</div>
+    <div class="swatch-row" id="m-swatches">
+      ${COLOR_PAIRS.map(c => `<div class="swatch" data-fill="${c.fill}" data-stroke="${c.stroke}"
+        style="background:linear-gradient(135deg, ${c.fill} 55%, ${c.stroke} 55%)"></div>`).join('')}
+    </div>
+    <div class="insp-title">Hành động</div>
+    <button style="width:100%;justify-content:center;margin-bottom:6px" id="m-lock">🔒 Khoá / Mở khoá</button>
+    <button style="width:100%;justify-content:center" id="m-dup">Nhân bản (Ctrl+D)</button>
+    <button class="danger" id="m-del">Xoá tất cả (Del)</button>
+  `;
+  const g = id => document.getElementById(id);
+  g('a-left').onclick = () => alignNodes('left');
+  g('a-hc').onclick = () => alignNodes('hcenter');
+  g('a-right').onclick = () => alignNodes('right');
+  g('a-top').onclick = () => alignNodes('top');
+  g('a-vc').onclick = () => alignNodes('vcenter');
+  g('a-bottom').onclick = () => alignNodes('bottom');
+  g('a-dh').onclick = () => alignNodes('distH');
+  g('a-dv').onclick = () => alignNodes('distV');
+  g('m-lock').onclick = () => {
+    const anyUnlocked = sel.some(n => !n.locked);
+    sel.forEach(n => n.locked = anyUnlocked);
+    render(); pushHistory();
+  };
+  g('m-dup').onclick = duplicateSelection;
+  g('m-del').onclick = deleteSelection;
+  document.querySelectorAll('#m-swatches .swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      sel.forEach(n => { n.fill = sw.dataset.fill; n.stroke = sw.dataset.stroke; });
+      render(); pushHistory();
+    });
+  });
+}
+
+function renderEdgeInspector(ed) {
+  const routing = ed.routing || 'curve';
+  inspector.innerHTML = `
+    <div class="insp-title">Thuộc tính đường nối</div>
+    <label class="fld"><span>Nhãn</span>
+      <input type="text" id="e-label" value="${esc(ed.label || '')}" placeholder="VD: Có / Không">
+    </label>
+    <label class="fld"><span>Định tuyến</span>
+      <div class="seg" id="e-routing">
+        <button data-v="curve" class="${routing === 'curve' ? 'active' : ''}">Cong</button>
+        <button data-v="straight" class="${routing === 'straight' ? 'active' : ''}">Thẳng</button>
+        <button data-v="orthogonal" class="${routing === 'orthogonal' ? 'active' : ''}">Gấp khúc</button>
+      </div>
+    </label>
+    <div class="row2">
+      <label class="fld"><span>Màu</span><input type="color" id="e-color" value="${ed.color || '#7c869e'}"></label>
+      <label class="fld"><span>Độ dày</span><input type="number" id="e-width" value="${ed.width || 2}" min="1" max="10" step="0.5"></label>
+    </div>
+    <label class="fld"><span>Kiểu nét</span>
+      <select id="e-style">
+        <option value="solid" ${!ed.dashed ? 'selected' : ''}>Liền</option>
+        <option value="dashed" ${ed.dashed ? 'selected' : ''}>Nét đứt</option>
+      </select>
+    </label>
+    <label class="fld"><span>Mũi tên</span>
+      <select id="e-arrow">
+        <option value="end" ${ed.arrowEnd !== false && !ed.arrowStart ? 'selected' : ''}>Ở cuối</option>
+        <option value="start" ${!ed.arrowEnd && ed.arrowStart ? 'selected' : ''}>Ở đầu</option>
+        <option value="both" ${ed.arrowEnd !== false && ed.arrowStart ? 'selected' : ''}>Cả hai đầu</option>
+        <option value="none" ${!ed.arrowEnd && !ed.arrowStart ? 'selected' : ''}>Không</option>
+      </select>
+    </label>
+    <div class="row2">
+      <label class="fld"><span>Đầu nối</span>
+        <select id="e-from">
+          ${['auto','top','right','bottom','left'].map(s =>
+            `<option value="${s}" ${(ed.fromSide || 'auto') === s ? 'selected' : ''}>${
+              {auto:'Tự động',top:'Trên',right:'Phải',bottom:'Dưới',left:'Trái'}[s]}</option>`).join('')}
+        </select>
+      </label>
+      <label class="fld"><span>Cuối nối</span>
+        <select id="e-to">
+          ${['auto','top','right','bottom','left'].map(s =>
+            `<option value="${s}" ${(ed.toSide || 'auto') === s ? 'selected' : ''}>${
+              {auto:'Tự động',top:'Trên',right:'Phải',bottom:'Dưới',left:'Trái'}[s]}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+    <div class="insp-title">Hành động</div>
+    <button class="danger" id="e-del">Xoá đường nối (Del)</button>
+  `;
+  const g = id => document.getElementById(id);
+  g('e-label').addEventListener('input', ev => { ed.label = ev.target.value; render(true); });
+  g('e-label').addEventListener('change', pushHistory);
+  document.querySelectorAll('#e-routing button').forEach(b => {
+    b.onclick = () => {
+      ed.routing = b.dataset.v;
+      render(); pushHistory();
+    };
+  });
+  g('e-color').addEventListener('input', ev => { ed.color = ev.target.value; render(true); });
+  g('e-color').addEventListener('change', pushHistory);
+  g('e-width').addEventListener('input', ev => { ed.width = clamp(parseFloat(ev.target.value) || 2, 1, 10); render(true); });
+  g('e-width').addEventListener('change', pushHistory);
+  g('e-style').addEventListener('change', ev => { ed.dashed = ev.target.value === 'dashed'; render(); pushHistory(); });
+  g('e-arrow').addEventListener('change', ev => {
+    const v = ev.target.value;
+    ed.arrowEnd = v === 'end' || v === 'both';
+    ed.arrowStart = v === 'start' || v === 'both';
+    render(); pushHistory();
+  });
+  g('e-from').addEventListener('change', ev => { ed.fromSide = ev.target.value; render(); pushHistory(); });
+  g('e-to').addEventListener('change', ev => { ed.toSide = ev.target.value; render(); pushHistory(); });
+  g('e-del').onclick = deleteSelection;
+}
+
+/* ==================================================================
+   PALETTE (grouped, collapsible)
+   ================================================================== */
+function paletteIcon(type) {
+  const w = 42, h = 28;
+  const sh = SHAPES[type];
+  const paths = shapePaths(type, 3, 3, w - 6, h - 6);
+  const fill0 = sh.fill === 'transparent' ? 'none' : sh.fill;
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    ${paths.map((d, i) => `<path d="${d}" fill="${i === 0 ? fill0 : 'none'}" stroke="${sh.stroke}"
+      stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`).join('')}
+  </svg>`;
+}
+function buildPalette() {
+  paletteEl.innerHTML = '';
+  GROUP_ORDER.forEach(gr => {
+    const shapes = Object.entries(SHAPES).filter(([, v]) => v.group === gr);
+    const group = document.createElement('div');
+    group.className = 'pal-group';
+    group.innerHTML = `
+      <div class="pal-group-header">
+        <span>${gr}</span>
+        <span class="chev">▾</span>
+      </div>
+      <div class="pal-group-items"></div>
+    `;
+    const items = group.querySelector('.pal-group-items');
+    shapes.forEach(([k, v]) => {
+      const el = document.createElement('div');
+      el.className = 'pal-item';
+      el.title = `Thêm ${v.label}`;
+      el.innerHTML = paletteIcon(k) + `<span>${v.label}</span>`;
+      el.addEventListener('click', () => {
+        const c = centerWorld();
+        const n = addNode(k, c.x, c.y);
+        clearSelection();
+        selected.nodes.add(n.id);
+        render(); pushHistory();
+      });
+      items.appendChild(el);
+    });
+    const header = group.querySelector('.pal-group-header');
+    header.addEventListener('click', () => group.classList.toggle('collapsed'));
+    paletteEl.appendChild(group);
+  });
+
+  /* hints */
+  const hintBox = document.createElement('div');
+  hintBox.innerHTML = `<div style="font-size:10.5px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--muted);margin:16px 0 9px;">Điều khiển</div>
+    <ul class="hints">
+      <li><b>Kéo chuột trái</b> vùng trống → pan</li>
+      <li><b>Shift + kéo</b> → chọn vùng</li>
+      <li><b>Chuột phải</b> → menu tuỳ chỉnh</li>
+      <li><b>Nhấn đúp</b> canvas → tạo hình</li>
+      <li><b>Alt + kéo</b> hình → nhân bản</li>
+      <li><b>Ctrl+F</b> tìm · <b>?</b> trợ giúp</li>
+      <li>Lăn chuột → thu phóng</li>
+    </ul>`;
+  paletteEl.appendChild(hintBox);
+}
+
+/* ==================================================================
+   EXPORT / IMPORT
+   ================================================================== */
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+}
+function contentBounds() {
+  if (!nodes.length) return { x: 0, y: 0, w: 900, h: 640 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.w); maxY = Math.max(maxY, n.y + n.h);
+  });
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+function buildExportSVG() {
+  const pad = 44;
+  const b = contentBounds();
+  const W = b.w + pad * 2, H = b.h + pad * 2;
+  const cloneEdges = edgesLayer.cloneNode(true);
+  const cloneNodes = nodesLayer.cloneNode(true);
+  [cloneEdges, cloneNodes].forEach(layer => {
+    layer.querySelectorAll('.port,.handle,.sel-outline,.target-highlight,.lock-badge').forEach(el => el.remove());
+    layer.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+  });
+  const out = svgEl('svg', { xmlns: NS, width: W, height: H, viewBox: `${b.x - pad} ${b.y - pad} ${W} ${H}` });
+  out.appendChild(svgEl('rect', { x: b.x - pad, y: b.y - pad, width: W, height: H, fill: '#ffffff' }));
+  out.appendChild(defs.cloneNode(true));
+  const g = svgEl('g');
+  g.appendChild(cloneEdges);
+  g.appendChild(cloneNodes);
+  out.appendChild(g);
+  return { svg: out, W, H };
+}
+function exportSVGFile() {
+  if (!nodes.length) return alert('Chưa có nội dung để xuất.');
+  const { svg: s } = buildExportSVG();
+  const str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(s);
+  downloadBlob(new Blob([str], { type: 'image/svg+xml;charset=utf-8' }), 'fwrt-flowchart.svg');
+}
+function exportPNG() {
+  if (!nodes.length) return alert('Chưa có nội dung để xuất.');
+  const { svg: s, W, H } = buildExportSVG();
+  const str = new XMLSerializer().serializeToString(s);
+  const url = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml;charset=utf-8' }));
+  const img = new Image();
+  img.onload = () => {
+    const scale = 2;
+    const c = document.createElement('canvas');
+    c.width = Math.round(W * scale);
+    c.height = Math.round(H * scale);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    c.toBlob(blob => downloadBlob(blob, 'fwrt-flowchart.png'), 'image/png');
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); alert('Không thể xuất PNG.'); };
+  img.src = url;
+}
+function saveJSON() {
+  const data = {
+    app: 'Fwrt', version: 4,
+    savedAt: new Date().toISOString(),
+    view, nodes, edges
+  };
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'fwrt-flowchart.json');
+}
+function openJSON(text) {
+  try {
+    const d = JSON.parse(text);
+    if (!d.nodes || !Array.isArray(d.nodes)) throw new Error('Định dạng không hợp lệ');
+    nodes = d.nodes;
+    edges = d.edges || [];
+    if (d.view) { view.x = d.view.x || 0; view.y = d.view.y || 0; view.k = d.view.k || 1; }
+    clearSelection();
+    const keyMap = {
+      terminator: 'oval', process: 'rect', decision: 'diamond', io: 'parallelogram',
+      preparation: 'hexagon', manual: 'trapezoid', connector: 'circle', database: 'cylinder'
+    };
+    nodes.forEach(n => {
+      if (keyMap[n.type]) n.type = keyMap[n.type];
+      n.fill = n.fill || '#dbeafe';
+      n.stroke = n.stroke || '#2563eb';
+      n.textColor = n.textColor || '#1e2433';
+      n.fontSize = n.fontSize || 14;
+      n.strokeWidth = n.strokeWidth ?? 2;
+      if (n.bold === undefined) n.bold = false;
+      if (n.italic === undefined) n.italic = false;
+      if (!n.hAlign) n.hAlign = 'center';
+      if (!n.vAlign) n.vAlign = 'middle';
+      if (n.locked === undefined) n.locked = false;
+    });
+    edges.forEach(e => {
+      e.color = e.color || '#7c869e';
+      e.width = e.width || 2;
+      e.fromSide = e.fromSide || 'auto';
+      e.toSide = e.toSide || 'auto';
+      if (e.arrowEnd === undefined) e.arrowEnd = true;
+      if (e.arrowStart === undefined) e.arrowStart = false;
+      if (!e.routing) e.routing = 'curve';
+    });
+    history = []; hIndex = -1;
+    render(); pushHistory();
+    setTimeout(fitView, 60);
+    flashIndicator('Đã mở lưu đồ');
+  } catch (err) {
+    alert('Lỗi khi mở file: ' + err.message);
+  }
+}
+
+let autoSaveTimer = null;
+function autoSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    try { localStorage.setItem('fwrt-flowchart-v4', JSON.stringify({ nodes, edges, view })); } catch (_) {}
+  }, 500);
+}
+function loadAutoSave() {
+  try {
+    const raw = localStorage.getItem('fwrt-flowchart-v4') || localStorage.getItem('fwrt-flowchart');
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d.nodes) return false;
+    nodes = d.nodes; edges = d.edges || [];
+    if (d.view) { view.x = d.view.x || 0; view.y = d.view.y || 0; view.k = d.view.k || 1; }
+    const keyMap = {
+      terminator: 'oval', process: 'rect', decision: 'diamond', io: 'parallelogram',
+      preparation: 'hexagon', manual: 'trapezoid', connector: 'circle', database: 'cylinder'
+    };
+    nodes.forEach(n => {
+      if (keyMap[n.type]) n.type = keyMap[n.type];
+      if (!n.fill) n.fill = '#dbeafe';
+      if (!n.stroke) n.stroke = '#2563eb';
+      if (!n.textColor) n.textColor = '#1e2433';
+      if (!n.fontSize) n.fontSize = 14;
+      if (n.strokeWidth == null) n.strokeWidth = 2;
+      if (n.bold === undefined) n.bold = false;
+      if (n.italic === undefined) n.italic = false;
+      if (!n.hAlign) n.hAlign = 'center';
+      if (!n.vAlign) n.vAlign = 'middle';
+      if (n.locked === undefined) n.locked = false;
+    });
+    edges.forEach(e => {
+      if (!e.color) e.color = '#7c869e';
+      if (!e.width) e.width = 2;
+      if (!e.fromSide) e.fromSide = 'auto';
+      if (!e.toSide) e.toSide = 'auto';
+      if (e.arrowEnd === undefined) e.arrowEnd = true;
+      if (e.arrowStart === undefined) e.arrowStart = false;
+      if (!e.routing) e.routing = 'curve';
+    });
+    return true;
+  } catch (_) { return false; }
+}
+
+/* ==================================================================
+   VIEW
+   ================================================================== */
+function fitView() {
+  if (!nodes.length) {
+    view.x = canvasWrap.clientWidth / 2;
+    view.y = canvasWrap.clientHeight / 2;
+    view.k = 1;
+    render();
+    return;
+  }
+  const pad = 70;
+  const b = contentBounds();
+  const cw = canvasWrap.clientWidth, chh = canvasWrap.clientHeight;
+  const k = clamp(Math.min((cw - pad * 2) / b.w, (chh - pad * 2) / b.h), 0.12, 2.2);
+  view.k = k;
+  view.x = cw / 2 - (b.x + b.w / 2) * k;
+  view.y = chh / 2 - (b.y + b.h / 2) * k;
+  render();
+}
+function zoomBy(factor) {
+  const cw = canvasWrap.clientWidth / 2, chh = canvasWrap.clientHeight / 2;
+  const oldK = view.k;
+  const k = clamp(oldK * factor, 0.12, 4);
+  view.x = cw - (cw - view.x) * (k / oldK);
+  view.y = chh - (chh - view.y) * (k / oldK);
+  view.k = k;
+  render(true);
+}
+
+/* ==================================================================
+   BUTTONS
+   ================================================================== */
+document.getElementById('btnUndo').onclick = undo;
+document.getElementById('btnRedo').onclick = redo;
+document.getElementById('btnZoomIn').onclick = () => zoomBy(1.2);
+document.getElementById('btnZoomOut').onclick = () => zoomBy(1 / 1.2);
+document.getElementById('btnFit').onclick = () => fitView();
+document.getElementById('btnSave').onclick = saveJSON;
+document.getElementById('btnSvg').onclick = exportSVGFile;
+document.getElementById('btnPng').onclick = exportPNG;
+document.getElementById('btnOpen').onclick = () => fileInput.click();
+document.getElementById('btnSearch').onclick = openSearch;
+document.getElementById('btnNew').onclick = () => {
+  if (nodes.length && !confirm('Tạo lưu đồ mới? Nội dung hiện tại sẽ bị xoá.')) return;
+  nodes = []; edges = [];
+  clearSelection();
+  view.x = canvasWrap.clientWidth / 2;
+  view.y = canvasWrap.clientHeight / 2;
+  view.k = 1;
+  history = []; hIndex = -1;
+  render(); pushHistory();
+  localStorage.removeItem('fwrt-flowchart-v4');
+  localStorage.removeItem('fwrt-flowchart');
+};
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => openJSON(reader.result);
+  reader.readAsText(f);
+  fileInput.value = '';
+});
+chkGrid.addEventListener('change', () => updateGrid());
+chkSnap.addEventListener('change', () => { snapToGrid = chkSnap.checked; });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => openJSON(reader.result);
+  reader.readAsText(f);
+});
+
+/* ==================================================================
+   INIT
+   ================================================================== */
+function init() {
+  buildPalette();
+  const loaded = loadAutoSave();
+  if (!loaded) {
+    view.x = canvasWrap.clientWidth / 2;
+    view.y = canvasWrap.clientHeight / 2;
+    view.k = 1;
+  }
+  render();
+  pushHistory();
+  updateUndoButtons();
+  window.addEventListener('resize', () => drawMinimap());
+  window.addEventListener('beforeunload', () => { if (nodes.length) autoSave(); });
+}
+init();
+</script>
+</body>
+</html>
