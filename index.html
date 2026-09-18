@@ -58,29 +58,124 @@
     user-select:none;padding:0 3px;}
   .chk input{accent-color:var(--accent);cursor:pointer;}
   #zoomLabel{font-size:12px;color:var(--muted);min-width:42px;text-align:center;font-variant-numeric:tabular-nums;}
+
+  /* ================================================================
+     TABS BAR — Browser-style with scroll buttons + dropdown
+     ================================================================ */
   .tabsbar{height:40px;flex:0 0 40px;background:var(--panel);border-bottom:1px solid var(--border);
-    display:flex;align-items:center;gap:6px;padding:0 10px;overflow:hidden;}
-  .tabs{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0;padding:4px 0;}
-  .tabs::-webkit-scrollbar{display:none;}
-  .tab{display:inline-flex;align-items:center;gap:4px;padding:4px 6px 4px 11px;border-radius:8px;
-    cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;border:1px solid transparent;
-    transition:all .13s;user-select:none;max-width:200px;flex-shrink:0;}
+    display:flex;align-items:center;gap:6px;padding:0 8px;overflow:hidden;}
+
+  /* Nút scroll (◀ ▶) */
+  .tab-scroll-btn{
+    width:24px;height:26px;flex:0 0 24px;padding:0;justify-content:center;
+    border-radius:6px;color:var(--muted);background:transparent;border:none;
+    transition:all .13s;display:none;
+  }
+  .tab-scroll-btn:hover{background:var(--hover);color:var(--text);}
+  .tab-scroll-btn.visible{display:inline-flex;}
+  .tab-scroll-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+  /* Wrapper cho tabs + scroll buttons */
+  .tabs-wrap{display:flex;align-items:center;gap:2px;flex:1;min-width:0;overflow:hidden;}
+
+  /* Vùng chứa các tab — cuộn ngang */
+  .tabs{
+    display:flex;gap:3px;overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;flex:1;min-width:0;padding:4px 0;
+    scroll-behavior:smooth;
+    scrollbar-color:transparent transparent;
+    -ms-overflow-style:none;
+    cursor:default;
+  }
+  .tabs::-webkit-scrollbar{display:none;width:0;height:0;}
+  .tabs.dragging{cursor:grabbing;scroll-behavior:auto;}
+
+  /* Tab — co giãn thông minh */
+  .tab{
+    display:inline-flex;align-items:center;gap:4px;
+    padding:4px 6px 4px 11px;border-radius:8px;
+    cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;
+    border:1px solid transparent;transition:all .13s;user-select:none;
+    max-width:200px;min-width:60px;flex:0 1 auto;
+    position:relative;
+  }
   .tab:hover{background:var(--hover);color:var(--text);}
   .tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600;}
   .tab.dragging{opacity:.4;}
   .tab.drag-over{border-color:var(--accent);background:var(--accent-soft);}
-  .tab .tab-name{overflow:hidden;text-overflow:ellipsis;max-width:130px;}
-  .tab .tab-close{font-size:14px;opacity:.55;padding:3px 6px;border-radius:5px;line-height:1;
+  .tab .tab-name{overflow:hidden;text-overflow:ellipsis;max-width:130px;flex:1;min-width:0;}
+  .tab .tab-close{
+    font-size:14px;opacity:.55;padding:3px 6px;border-radius:5px;line-height:1;
     cursor:pointer;font-weight:400;display:inline-flex;align-items:center;justify-content:center;
-    min-width:20px;min-height:20px;transition:all .12s;user-select:none;}
+    min-width:18px;min-height:18px;transition:all .12s;user-select:none;flex:0 0 auto;
+  }
   .tab .tab-close:hover{opacity:1;background:rgba(225,29,72,.15);color:var(--danger);}
   body.dark .tab .tab-close:hover{background:rgba(248,113,113,.2);}
-  .tab-add{width:28px;height:28px;padding:0;justify-content:center;font-size:17px;border-radius:8px;
-    color:var(--muted);flex:0 0 28px;}
+
+  /* Nút thêm tab mới */
+  .tab-add{width:26px;height:26px;padding:0;justify-content:center;font-size:16px;border-radius:7px;
+    color:var(--muted);flex:0 0 26px;margin-left:2px;}
+
+  /* Nút dropdown hiện tất cả tab */
+  .tab-dropdown-btn{
+    width:26px;height:26px;flex:0 0 26px;padding:0;justify-content:center;font-size:11px;
+    border-radius:7px;color:var(--muted);margin-left:2px;
+  }
+  .tab-dropdown-btn.visible{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+
+  /* Dropdown list all tabs */
+  .tab-dropdown{
+    position:fixed;z-index:1500;
+    background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 20px 60px rgba(20,30,60,.25), 0 4px 12px rgba(20,30,60,.12);
+    min-width:260px;max-width:340px;max-height:60vh;overflow-y:auto;
+    padding:6px;font-size:12.5px;
+    display:none;
+    animation:dropdownIn .16s cubic-bezier(.2,.8,.4,1);
+  }
+  @keyframes dropdownIn{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+  .tab-dropdown.show{display:block;}
+  .tab-dropdown-header{
+    padding:8px 10px 6px;font-size:10px;font-weight:700;letter-spacing:.8px;
+    text-transform:uppercase;color:var(--muted);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .tab-dropdown-header .count{font-weight:500;opacity:.7;text-transform:none;letter-spacing:0;}
+  .tab-dropdown-item{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 10px;border-radius:8px;cursor:pointer;
+    color:var(--text);user-select:none;transition:background .1s;
+    position:relative;
+  }
+  .tab-dropdown-item:hover{background:var(--accent-soft);color:var(--accent);}
+  .tab-dropdown-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600;}
+  .tab-dropdown-item .num{
+    font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;
+    min-width:20px;text-align:center;opacity:.7;
+  }
+  .tab-dropdown-item.active .num{color:var(--accent);}
+  .tab-dropdown-item .name{
+    flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .tab-dropdown-item .close{
+    font-size:14px;opacity:.4;padding:2px 5px;border-radius:4px;line-height:1;
+    cursor:pointer;transition:all .12s;flex:0 0 auto;
+  }
+  .tab-dropdown-item .close:hover{opacity:1;background:rgba(225,29,72,.15);color:var(--danger);}
+  body.dark .tab-dropdown-item .close:hover{background:rgba(248,113,113,.2);}
+  .tab-dropdown-sep{height:1px;background:var(--border);margin:4px 4px;}
+  .tab-dropdown-empty{padding:20px;text-align:center;color:var(--muted);font-size:12px;}
+
   .tab-actions{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+
   .body{display:flex;flex:1;min-height:0;}
-  .palette{width:224px;flex:0 0 224px;background:var(--panel);border-right:1px solid var(--border);
-    overflow-y:auto;padding:10px 10px 14px;}
+  .palette{width:248px;flex:0 0 248px;background:var(--panel);border-right:1px solid var(--border);
+    overflow-y:auto;overflow-x:hidden;padding:10px 10px 14px;
+    transition:width .25s cubic-bezier(.2,.8,.4,1), flex-basis .25s cubic-bezier(.2,.8,.4,1), padding .25s, border-width .25s;
+  }
+  body.palette-hidden .palette{
+    width:0;flex:0 0 0;padding:0;border-right:none;overflow:hidden;
+  }
   .pal-group{margin-bottom:8px;border-radius:10px;border:1px solid var(--border);overflow:hidden;background:var(--panel);}
   .pal-group-header{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;
     cursor:pointer;font-size:10.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;
@@ -89,7 +184,7 @@
   .pal-group-header .chev{transition:transform .18s;font-size:10px;opacity:.7;}
   .pal-group.collapsed .pal-group-header .chev{transform:rotate(-90deg);}
   .pal-group.collapsed .pal-group-items{display:none;}
-  .pal-group-items{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:7px;}
+  .pal-group-items{display:grid;grid-template-columns:repeat(auto-fill, minmax(42px, 1fr));gap:4px;padding:7px;}
   .pal-item{display:grid;place-items:center;padding:6px 2px;aspect-ratio:1.4;
     border:1px solid var(--border);border-radius:7px;background:var(--panel);cursor:pointer;
     transition:all .13s ease;}
@@ -304,6 +399,8 @@
   .tpl-item:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
   .tpl-item .tpl-icon{font-size:18px;width:24px;text-align:center;}
   .tpl-item .tpl-name{font-weight:500;}
+  #btnTogglePalette{position:relative;}
+  body.palette-hidden #btnTogglePalette{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 </style>
 </head>
 <body>
@@ -315,6 +412,8 @@
       <div class="name"><b>Fwrt</b><small>FLOWCHART EDITOR</small></div>
     </div>
     <div class="tools">
+      <button class="icon" id="btnTogglePalette" title="Ẩn/Hiện bảng hình (Ctrl+B)">◀</button>
+      <span class="divider"></span>
       <button class="icon" id="btnUndo" title="Hoàn tác (Ctrl+Z)">↶</button>
       <button class="icon" id="btnRedo" title="Làm lại (Ctrl+Y)">↷</button>
       <button class="icon" id="btnSearch" title="Tìm kiếm (Ctrl+F)">🔍</button>
@@ -337,9 +436,18 @@
       <button id="btnPng" class="primary" title="Xuất ảnh PNG nhanh">⤓ PNG</button>
     </div>
   </header>
+
+  <!-- ============================================================
+       TABS BAR — Browser style với scroll buttons + dropdown
+       ============================================================ -->
   <div class="tabsbar">
-    <div class="tabs" id="tabsList"></div>
+    <div class="tabs-wrap">
+      <button class="tab-scroll-btn" id="tabScrollLeft" title="Cuộn trái">‹</button>
+      <div class="tabs" id="tabsList"></div>
+      <button class="tab-scroll-btn" id="tabScrollRight" title="Cuộn phải">›</button>
+    </div>
     <button class="tab-add" id="btnAddPage" title="Thêm trang (Ctrl+T)">+</button>
+    <button class="tab-dropdown-btn" id="tabDropdownBtn" title="Danh sách tab (Ctrl+Shift+Tab)">▾</button>
     <div style="flex:1"></div>
     <div class="tab-actions">
       <button id="btnTemplates" title="Chèn mẫu">📋 Mẫu</button>
@@ -348,6 +456,10 @@
       <button class="icon" id="btnFullscreen" title="Toàn màn hình (F11)">⛶</button>
     </div>
   </div>
+
+  <!-- Dropdown list all tabs -->
+  <div class="tab-dropdown" id="tabDropdown"></div>
+
   <div class="body">
     <aside class="palette" id="palette"></aside>
     <main class="canvas-wrap" id="canvasWrap">
@@ -416,11 +528,7 @@
 <script>
 'use strict';
 /* ==================================================================
-   Fwrt v8.2 — Text edit qua Inspector (không có textarea nổi)
-   - Click lần 1: chọn
-   - Click lần 2 (đã chọn): focus vào textarea ở Inspector
-   - Double-click: focus vào textarea ở Inspector
-   - Click vùng trống: bỏ chọn
+   Fwrt v8.5 — Browser-style tabs (scroll buttons + dropdown list)
    ================================================================== */
 
 const $ = id => document.getElementById(id);
@@ -771,6 +879,8 @@ function loadPage(id) {
   pushHistory();
   updateUndoButtons();
   renderTabs();
+  // Auto-scroll active tab vào view
+  setTimeout(scrollActiveTabIntoView, 30);
 }
 function addPage() {
   saveCurrentPage();
@@ -825,6 +935,9 @@ function gotoPageIndex(i) {
 function nextPage() { const i = pages.findIndex(p => p.id === activePageId); gotoPageIndex((i + 1) % pages.length); }
 function prevPage() { const i = pages.findIndex(p => p.id === activePageId); gotoPageIndex((i - 1 + pages.length) % pages.length); }
 
+/* ==================================================================
+   RENDER TABS — với scroll buttons + dropdown + drag scroll
+   ================================================================== */
 function renderTabs() {
   const tabsList = $('tabsList');
   if (!tabsList) return;
@@ -835,10 +948,12 @@ function renderTabs() {
     el.draggable = true;
     el.dataset.pageId = p.id;
     el.title = p.name + (i + 1 <= 9 ? '  (Ctrl+' + (i + 1) + ')' : '');
+
     const nameSpan = document.createElement('span');
     nameSpan.className = 'tab-name';
     nameSpan.textContent = p.name;
     el.appendChild(nameSpan);
+
     if (pages.length > 1) {
       const closeBtn = document.createElement('span');
       closeBtn.className = 'tab-close';
@@ -849,6 +964,7 @@ function renderTabs() {
       closeBtn.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); });
       el.appendChild(closeBtn);
     }
+
     el.addEventListener('click', ev => {
       if (ev.target.classList.contains('tab-close')) return;
       if (p.id !== activePageId) loadPage(p.id);
@@ -877,11 +993,211 @@ function renderTabs() {
     });
     tabsList.appendChild(el);
   });
+
+  updateTabScrollButtons();
+  // Auto scroll active tab vào view
+  setTimeout(scrollActiveTabIntoView, 20);
+  updateTabDropdownBtnState();
+}
+
+function scrollActiveTabIntoView() {
+  const tabsList = $('tabsList');
+  if (!tabsList) return;
   const activeEl = tabsList.querySelector('.tab.active');
   if (activeEl && activeEl.scrollIntoView) {
-    try { activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch (_) {}
+    try {
+      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    } catch (_) {}
   }
+  // Cập nhật lại scroll buttons sau khi cuộn
+  setTimeout(updateTabScrollButtons, 260);
 }
+
+function updateTabScrollButtons() {
+  const tabsList = $('tabsList');
+  const leftBtn = $('tabScrollLeft');
+  const rightBtn = $('tabScrollRight');
+  if (!tabsList || !leftBtn || !rightBtn) return;
+
+  const hasOverflow = tabsList.scrollWidth > tabsList.clientWidth + 2;
+  const atStart = tabsList.scrollLeft <= 2;
+  const atEnd = tabsList.scrollLeft + tabsList.clientWidth >= tabsList.scrollWidth - 2;
+
+  leftBtn.classList.toggle('visible', hasOverflow && !atStart);
+  rightBtn.classList.toggle('visible', hasOverflow && !atEnd);
+  leftBtn.disabled = atStart;
+  rightBtn.disabled = atEnd;
+}
+
+function updateTabDropdownBtnState() {
+  const btn = $('tabDropdownBtn');
+  if (!btn) return;
+  // Hiện nút dropdown khi có nhiều hơn 1 tab
+  btn.classList.toggle('visible', pages.length > 1);
+}
+
+/* Scroll buttons */
+function scrollTabsBy(dir) {
+  const tabsList = $('tabsList');
+  if (!tabsList) return;
+  const amount = Math.max(120, tabsList.clientWidth * 0.6);
+  tabsList.scrollBy({ left: dir * amount, behavior: 'smooth' });
+  setTimeout(updateTabScrollButtons, 260);
+}
+click('tabScrollLeft', () => scrollTabsBy(-1));
+click('tabScrollRight', () => scrollTabsBy(1));
+
+/* Middle mouse wheel on tabs to scroll horizontally */
+(function attachTabsWheel() {
+  const tabsList = $('tabsList');
+  if (!tabsList) return;
+  tabsList.addEventListener('wheel', e => {
+    // Scroll ngang khi có overflow
+    if (tabsList.scrollWidth <= tabsList.clientWidth + 2) return;
+    // Chuyển wheel dọc thành scroll ngang
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      tabsList.scrollLeft += e.deltaY;
+      e.preventDefault();
+      updateTabScrollButtons();
+    }
+  }, { passive: false });
+  // Cập nhật scroll buttons khi cuộn
+  tabsList.addEventListener('scroll', updateTabScrollButtons, { passive: true });
+})();
+
+/* Drag scroll: kéo vùng trống của tabsbar để cuộn */
+(function attachDragScroll() {
+  const tabsList = $('tabsList');
+  if (!tabsList) return;
+  let isDragging = false;
+  let startX = 0, startScrollLeft = 0;
+  let moved = false;
+
+  tabsList.addEventListener('pointerdown', e => {
+    // Chỉ kích hoạt khi click vào vùng trống (không phải tab, không phải scroll btn)
+    if (e.target !== tabsList) return;
+    if (e.button !== 0) return;
+    isDragging = true;
+    moved = false;
+    startX = e.clientX;
+    startScrollLeft = tabsList.scrollLeft;
+    tabsList.classList.add('dragging');
+    try { tabsList.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  tabsList.addEventListener('pointermove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    if (Math.abs(dx) > 3) moved = true;
+    tabsList.scrollLeft = startScrollLeft - dx;
+    updateTabScrollButtons();
+  });
+  const endDrag = (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    tabsList.classList.remove('dragging');
+    try { tabsList.releasePointerCapture(e.pointerId); } catch (_) {}
+  };
+  tabsList.addEventListener('pointerup', endDrag);
+  tabsList.addEventListener('pointercancel', endDrag);
+})();
+
+/* ==================================================================
+   TAB DROPDOWN — danh sách tất cả tab
+   ================================================================== */
+function openTabDropdown() {
+  const dd = $('tabDropdown');
+  const btn = $('tabDropdownBtn');
+  if (!dd || !btn) return;
+  if (dd.classList.contains('show')) { closeTabDropdown(); return; }
+
+  dd.innerHTML = '';
+  const header = document.createElement('div');
+  header.className = 'tab-dropdown-header';
+  header.innerHTML = '<span>Danh sách tab</span><span class="count">' + pages.length + ' trang</span>';
+  dd.appendChild(header);
+
+  pages.forEach((p, i) => {
+    const item = document.createElement('div');
+    item.className = 'tab-dropdown-item' + (p.id === activePageId ? ' active' : '');
+    item.innerHTML =
+      '<span class="num">' + (i + 1 <= 9 ? (i + 1) : '·') + '</span>' +
+      '<span class="name">' + esc(p.name) + '</span>' +
+      (pages.length > 1 ? '<span class="close" title="Đóng tab">×</span>' : '');
+    item.addEventListener('click', ev => {
+      if (ev.target.classList.contains('close')) {
+        ev.stopPropagation();
+        removePage(p.id);
+        if (pages.length > 0 && dd.classList.contains('show')) {
+          setTimeout(openTabDropdown, 10); // refresh
+          openTabDropdown();
+        }
+        return;
+      }
+      if (p.id !== activePageId) loadPage(p.id);
+      closeTabDropdown();
+    });
+    item.addEventListener('contextmenu', ev => {
+      ev.preventDefault();
+      closeTabDropdown();
+      showTabContextMenu(ev, p.id);
+    });
+    dd.appendChild(item);
+  });
+
+  if (pages.length > 1) {
+    const sep = document.createElement('div');
+    sep.className = 'tab-dropdown-sep';
+    dd.appendChild(sep);
+    const addItem = document.createElement('div');
+    addItem.className = 'tab-dropdown-item';
+    addItem.innerHTML = '<span class="num">+</span><span class="name" style="color:var(--accent);font-weight:600">Trang mới</span>';
+    addItem.addEventListener('click', () => {
+      addPage();
+      closeTabDropdown();
+    });
+    dd.appendChild(addItem);
+  }
+
+  // Position dropdown
+  const r = btn.getBoundingClientRect();
+  dd.classList.add('show');
+  const ddRect = dd.getBoundingClientRect();
+  const left = Math.min(r.left, window.innerWidth - ddRect.width - 8);
+  const top = r.bottom + 4;
+  dd.style.left = Math.max(8, left) + 'px';
+  dd.style.top = top + 'px';
+  dd.style.maxHeight = Math.min(window.innerHeight - top - 16, 500) + 'px';
+}
+function closeTabDropdown() {
+  const dd = $('tabDropdown');
+  if (dd) dd.classList.remove('show');
+}
+click('tabDropdownBtn', openTabDropdown);
+
+// Click ngoài dropdown → đóng
+document.addEventListener('pointerdown', e => {
+  const dd = $('tabDropdown');
+  if (!dd || !dd.classList.contains('show')) return;
+  if (dd.contains(e.target)) return;
+  if (e.target.closest && e.target.closest('#tabDropdownBtn')) return;
+  closeTabDropdown();
+}, true);
+
+// Escape → đóng
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const dd = $('tabDropdown');
+    if (dd && dd.classList.contains('show')) { closeTabDropdown(); e.preventDefault(); }
+  }
+});
+
+// Cập nhật scroll buttons khi resize
+window.addEventListener('resize', () => {
+  updateTabScrollButtons();
+  closeTabDropdown();
+});
+
+/* ---------- Tab context menu ---------- */
 function showTabContextMenu(e, id) {
   const idx = pages.findIndex(p => p.id === id);
   const items = [
@@ -931,6 +1247,7 @@ let darkMode = safeStorage.get('fwrt-dark', '0') === '1';
 let lastCreatedShape = safeStorage.get('fwrt-last-shape', 'rect');
 let lastStyle = {};
 try { lastStyle = JSON.parse(safeStorage.get('fwrt-last-style', '{}')) || {}; } catch (_) { lastStyle = {}; }
+let paletteHidden = safeStorage.get('fwrt-palette-hidden', '0') === '1';
 
 function captureStyleFrom(node) {
   if (!node) return;
@@ -2198,7 +2515,6 @@ function onPointerUp(e) {
   if (d.type === 'node') {
     if (d.moved) pushHistory();
     render();
-    // Không kéo + node đã được chọn trước đó → focus vào textarea inspector
     if (!d.moved && d.pendingEditId) {
       const n = getNode(d.pendingEditId);
       if (n && !n.locked) focusInspectorText(n.id);
@@ -2269,14 +2585,12 @@ function addEdge(from, to, fromSide, toSide) {
   });
 }
 
-/* ---------- Double-click handler ---------- */
 if (svg) {
   svg.addEventListener('dblclick', e => {
     const nodeEl = closestOf(e.target, '.node');
     if (nodeEl) {
       const n = getNode(nodeEl.dataset.id);
       if (n && !n.locked) {
-        // Đảm bảo node được chọn
         if (!selected.nodes.has(n.id) || selected.nodes.size !== 1) {
           clearSelection();
           selected.nodes.add(n.id);
@@ -2304,27 +2618,19 @@ if (svg) {
   });
 }
 
-/* ---------- Focus vào textarea trong Inspector ---------- */
 function focusInspectorText(nodeId) {
   const n = getNode(nodeId);
   if (!n) return;
-
-  // Đảm bảo inspector đang render cho node này
   const ta = $('i-text');
   if (!ta || ta.dataset.nodeId !== nodeId) {
-    // Force re-render inspector cho node này
     updateInspector();
   }
-
-  // Đợi DOM update rồi focus
   requestAnimationFrame(() => {
     const ta2 = $('i-text');
     if (ta2 && ta2.dataset.nodeId === nodeId) {
-      // scroll tới đầu inspector
       if (inspector) inspector.scrollTop = 0;
       ta2.focus();
       ta2.select();
-      // Flash animation để user biết đang edit
       ta2.classList.remove('flash-focus');
       void ta2.offsetWidth;
       ta2.classList.add('flash-focus');
@@ -2349,6 +2655,15 @@ if (canvasWrap) {
 
 function hideCtxMenu() { if (ctxMenu) { ctxMenu.classList.remove('show'); ctxMenu.innerHTML = ''; } }
 document.addEventListener('pointerdown', e => { if (ctxMenu && !ctxMenu.contains(e.target)) hideCtxMenu(); }, true);
+
+/* Đóng search khi click ra ngoài (trừ khi click nút Search) */
+document.addEventListener('pointerdown', e => {
+  if (!searchPanel || !searchPanel.classList.contains('show')) return;
+  if (searchPanel.contains(e.target)) return;
+  if (e.target.closest && e.target.closest('#btnSearch')) return;
+  closeSearch();
+}, true);
+
 if (svg) {
   svg.addEventListener('contextmenu', e => {
     e.preventDefault();
@@ -2648,7 +2963,9 @@ const COMMANDS = [
   { icon: '✎', label: 'Đổi tên trang hiện tại', action: () => renamePage(activePageId) },
   { icon: '→', label: 'Trang kế tiếp', shortcut: 'Ctrl+Tab', action: nextPage },
   { icon: '←', label: 'Trang trước', shortcut: 'Ctrl+Shift+Tab', action: prevPage },
+  { icon: '▾', label: 'Danh sách tất cả tab', action: openTabDropdown },
   { type: 'sep' },
+  { icon: '◀', label: 'Ẩn/Hiện bảng hình', shortcut: 'Ctrl+B', action: togglePalette },
   { icon: '🔍', label: 'Tìm kiếm hình', shortcut: 'Ctrl+F', action: openSearch },
   { icon: '⌖', label: 'Vừa khung', shortcut: 'Ctrl+0', action: fitView },
   { icon: '⌖', label: 'Zoom tới vùng chọn', shortcut: 'Ctrl+Shift+0', action: zoomToSelection },
@@ -2748,10 +3065,32 @@ if (cmdInput) {
 }
 if (cmdOverlay) cmdOverlay.addEventListener('click', e => { if (e.target === cmdOverlay) closeCmd(); });
 
+function applyPaletteVisibility() {
+  document.body.classList.toggle('palette-hidden', paletteHidden);
+  const btn = $('btnTogglePalette');
+  if (btn) {
+    btn.textContent = paletteHidden ? '▶' : '◀';
+    btn.title = paletteHidden ? 'Hiện bảng hình (Ctrl+B)' : 'Ẩn bảng hình (Ctrl+B)';
+  }
+  setTimeout(() => {
+    if (typeof drawMinimap === 'function') drawMinimap();
+    if (typeof updateGrid === 'function') updateGrid();
+    if (typeof updateTabScrollButtons === 'function') updateTabScrollButtons();
+  }, 260);
+}
+function togglePalette() {
+  paletteHidden = !paletteHidden;
+  safeStorage.set('fwrt-palette-hidden', paletteHidden ? '1' : '0');
+  applyPaletteVisibility();
+  toast(paletteHidden ? 'Đã ẩn bảng hình' : 'Đã hiện bảng hình', 'info');
+}
+click('btnTogglePalette', togglePalette);
+
 window.addEventListener('keydown', e => {
   const tag = (e.target.tagName || '').toLowerCase();
   const inField = (tag === 'input' || tag === 'textarea' || tag === 'select');
   if (e.key === 'Escape') {
+    if ($('tabDropdown') && $('tabDropdown').classList.contains('show')) { closeTabDropdown(); e.preventDefault(); return; }
     if ($('dlgModal') && $('dlgModal').classList.contains('show')) { cancelDialog(); e.preventDefault(); return; }
     if (cmdOverlay && cmdOverlay.classList.contains('show')) { closeCmd(); e.preventDefault(); return; }
     if (searchPanel && searchPanel.classList.contains('show')) { closeSearch(); e.preventDefault(); return; }
@@ -2759,6 +3098,8 @@ window.addEventListener('keydown', e => {
   if (inField) { if (e.key === 'Escape') e.target.blur(); return; }
   const ctrl = e.ctrlKey || e.metaKey, shift = e.shiftKey, alt = e.altKey;
   if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); openCmd(); return; }
+  if (ctrl && e.key.toLowerCase() === 'b') { e.preventDefault(); togglePalette(); return; }
+  if (ctrl && shift && e.key === 'Tab') { e.preventDefault(); openTabDropdown(); return; }
   if (ctrl && e.key === 'Tab') { e.preventDefault(); if (shift) prevPage(); else nextPage(); return; }
   if (ctrl && !shift && !alt && e.key >= '1' && e.key <= '9') {
     const i = parseInt(e.key, 10) - 1;
@@ -2807,6 +3148,10 @@ function toggleFullscreen() {
 
 function openSearch() {
   if (!searchPanel) return;
+  if (searchPanel.classList.contains('show')) {
+    closeSearch();
+    return;
+  }
   searchPanel.classList.add('show');
   if (searchInput) searchInput.value = '';
   renderSearchResults('');
@@ -2863,31 +3208,33 @@ function openHelp() {
   if (!helpModal) return;
   if (helpBody && !helpBody.innerHTML) {
     helpBody.innerHTML =
+      '<div class="shortcut-section"><h3>Thanh tab</h3>' +
+      '<div class="shortcut-row"><span>Chuyển tab</span><span>Click tab hoặc <kbd>Ctrl</kbd>+<kbd>1</kbd>..<kbd>9</kbd></span></div>' +
+      '<div class="shortcut-row"><span>Tab kế/trước</span><span><kbd>Ctrl</kbd>+<kbd>Tab</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd></span></div>' +
+      '<div class="shortcut-row"><span>Xem tất cả tab</span><span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd> hoặc nút ▾</span></div>' +
+      '<div class="shortcut-row"><span>Cuộn tab</span><span>Chuột giữa · kéo vùng trống · nút ‹ ›</span></div>' +
+      '<div class="shortcut-row"><span>Đổi tên</span><span>Nhấn đúp tab</span></div>' +
+      '<div class="shortcut-row"><span>Đóng tab</span><span>Chuột giữa / nút ×</span></div>' +
+      '<div class="shortcut-row"><span>Sắp xếp lại</span><span>Kéo thả tab</span></div></div>' +
       '<div class="shortcut-section"><h3>Thao tác với hình</h3>' +
       '<div class="shortcut-row"><span><b>Click lần 1</b> vào hình</span><span>Chọn hình</span></div>' +
       '<div class="shortcut-row"><span><b>Click lần 2</b> (khi đã chọn)</span><span>Focus ô "Nội dung" ở Inspector</span></div>' +
       '<div class="shortcut-row"><span><b>Double click</b> vào hình</span><span>Focus ô "Nội dung" ở Inspector</span></div>' +
-      '<div class="shortcut-row"><span>Click vùng trống</span><span>Bỏ chọn</span></div>' +
-      '<div class="shortcut-row"><span>Kéo hình</span><span>Di chuyển (không vào edit)</span></div></div>' +
-      '<div class="shortcut-section"><h3>Trang & bố cục</h3>' +
-      '<div class="shortcut-row"><span>Trang mới</span><span><kbd>Ctrl</kbd>+<kbd>T</kbd></span></div>' +
-      '<div class="shortcut-row"><span>Đổi tên tab</span><span>Nhấn đúp tab</span></div>' +
-      '<div class="shortcut-row"><span>Nhảy tới trang</span><span><kbd>Ctrl</kbd>+<kbd>1</kbd>..<kbd>9</kbd></span></div></div>' +
+      '<div class="shortcut-row"><span>Click vùng trống</span><span>Bỏ chọn</span></div></div>' +
+      '<div class="shortcut-section"><h3>Bảng hình</h3>' +
+      '<div class="shortcut-row"><span>Ẩn/Hiện bảng hình</span><span><kbd>Ctrl</kbd>+<kbd>B</kbd> hoặc nút ◀/▶</span></div>' +
+      '<div class="shortcut-row"><span>Thu gọn 1 nhóm</span><span>Click tiêu đề nhóm</span></div></div>' +
+      '<div class="shortcut-section"><h3>Tìm kiếm</h3>' +
+      '<div class="shortcut-row"><span>Mở/Đóng tìm kiếm</span><span><kbd>Ctrl</kbd>+<kbd>F</kbd> hoặc nút 🔍</span></div>' +
+      '<div class="shortcut-row"><span>Đóng tìm kiếm</span><span>Click ra ngoài hoặc <kbd>Esc</kbd></span></div></div>' +
       '<div class="shortcut-section"><h3>Canvas</h3>' +
       '<div class="shortcut-row"><span>Pan</span><span>Kéo chuột trái vùng trống</span></div>' +
       '<div class="shortcut-row"><span>Chọn vùng</span><span><kbd>Shift</kbd>+kéo</span></div>' +
       '<div class="shortcut-row"><span>Zoom</span><span>Lăn chuột · <kbd>Ctrl</kbd>+<kbd>0</kbd></span></div>' +
       '<div class="shortcut-row"><span>Menu chuột phải</span><span>Menu đầy đủ</span></div></div>' +
-      '<div class="shortcut-section"><h3>Tạo & sửa</h3>' +
-      '<div class="shortcut-row"><span>Tạo hình nhanh</span><span>Nhấn đúp canvas</span></div>' +
-      '<div class="shortcut-row"><span>Nối hình</span><span>Kéo chấm tròn cạnh</span></div>' +
-      '<div class="shortcut-row"><span>Nhân bản nhanh</span><span><kbd>Alt</kbd>+kéo</span></div>' +
-      '<div class="shortcut-row"><span>Style kế thừa</span><span>Tạo hình mới sẽ copy style hình đang chọn</span></div></div>' +
-      '<div class="shortcut-section"><h3>Phím tắt</h3>' +
+      '<div class="shortcut-section"><h3>Phím tắt khác</h3>' +
       '<div class="shortcut-row"><span>Command Palette</span><span><kbd>Ctrl</kbd>+<kbd>K</kbd></span></div>' +
       '<div class="shortcut-row"><span>Copy / Cut / Paste</span><span><kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd></span></div>' +
-      '<div class="shortcut-row"><span>Copy format</span><span><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd></span></div>' +
-      '<div class="shortcut-row"><span>Paste format</span><span><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></span></div>' +
       '<div class="shortcut-row"><span>Hoàn tác / Làm lại</span><span><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></span></div>' +
       '<div class="shortcut-row"><span>Lưu JSON</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd></span></div>' +
       '<div class="shortcut-row"><span>In / PDF</span><span><kbd>Ctrl</kbd>+<kbd>P</kbd></span></div></div>';
@@ -2911,7 +3258,7 @@ function updateInspector() {
     '<b>Click lần 2</b> → focus ô Nội dung<br>' +
     '<b>Nhấn đúp</b> → cũng focus ô Nội dung<br>' +
     '<b>Click vùng trống</b> → bỏ chọn<br>' +
-    '<b>Ctrl+K</b> mở Command Palette</span></div>';
+    '<b>Ctrl+B</b> ẩn/hiện bảng hình</span></div>';
 }
 function renderNodeInspector(n) {
   if (!inspector) return;
@@ -2986,7 +3333,6 @@ function renderNodeInspector(n) {
   if (g('i-text')) {
     g('i-text').addEventListener('input', ev => { n.text = ev.target.value; render(true); });
     g('i-text').addEventListener('change', pushHistory);
-    // Cho phép Ctrl+Enter để blur
     g('i-text').addEventListener('keydown', ev => {
       ev.stopPropagation();
       if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); ev.target.blur(); }
@@ -3229,6 +3575,7 @@ function buildPalette() {
     '<li><b>Click lần 2</b> → focus ô Nội dung</li>' +
     '<li><b>Nhấn đúp</b> → cũng focus ô Nội dung</li>' +
     '<li>Click <b>vùng trống</b> → bỏ chọn</li>' +
+    '<li><b>Ctrl+B</b> ẩn/hiện bảng hình</li>' +
     '<li>Tạo mới sẽ <b>copy style</b> hình đang chọn</li></ul>';
   paletteEl.appendChild(hintBox);
 }
@@ -3606,11 +3953,16 @@ function init() {
     view.k = 1;
   }
   applyTheme();
+  applyPaletteVisibility();
   renderTabs();
   render();
   pushHistory();
   updateUndoButtons();
-  window.addEventListener('resize', () => { drawMinimap(); updateGrid(); });
+  window.addEventListener('resize', () => {
+    drawMinimap();
+    updateGrid();
+    updateTabScrollButtons();
+  });
   window.addEventListener('beforeunload', () => { if (nodes.length || pages.some(p => p.nodes.length)) autoSave(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) autoSave(); });
 }
