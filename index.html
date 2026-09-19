@@ -1562,6 +1562,7 @@ const viewport = $('viewport');
 const edgesLayer = $('edgesLayer');
 const nodesLayer = $('nodesLayer');
 const overlayLayer = $('overlayLayer');
+const groupsLayer = $('groupsLayer');
 const canvasWrap = $('canvasWrap');
 const inspector = $('inspector');
 const paletteEl = $('palette');
@@ -3380,14 +3381,14 @@ function createGroupFromSelection() {
   });
   if (freeIds.length < 2) { toast('Các node đã thuộc nhóm khác', 'warning'); return; }
   const gid = 'g' + Date.now() + Math.random().toString(36).slice(2, 6);
-  const color = GROUP_COLORS[groups.length % GROUP_COLORS.length];
-  const name = await0GetGroupName();
-  groups.push({ id: gid, name: name, color: color, memberIds: [...freeIds] });
+const color = GROUP_COLORS[groups.length % GROUP_COLORS.length];
+const name = getGroupName();
+groups.push({ id: gid, name: name, color: color, memberIds: [...freeIds] });
   freeIds.forEach(nid => { const n = getNode(nid); if (n) n.groupId = gid; });
   render(); pushHistory();
   toast('Đã tạo nhóm "' + name + '"', 'success');
 }
-function await0GetGroupName() {
+function getGroupName() {
   return 'Nhóm ' + (groups.length + 1);
 }
 
@@ -4795,7 +4796,6 @@ window.addEventListener('keydown', e => {
   }
   if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); openCmd(); return; }
   if (ctrl && e.key.toLowerCase() === 'b') { e.preventDefault(); togglePalette(); return; }
-  if (ctrl && shift && e.key.toLowerCase() === 'p') {
   if (ctrl && shift && e.key.toLowerCase() === 'p') {
     e.preventDefault();
     _showPerfBadge = !_showPerfBadge;
