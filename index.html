@@ -137,7 +137,8 @@
   .hints b{color:var(--text);font-weight:600;}
   .canvas-wrap{flex:1;position:relative;overflow:hidden;background-color:var(--bg);
     background-image:radial-gradient(circle,var(--grid-dot) 1px,transparent 1px);
-    background-size:20px 20px;cursor:default;transition:background-color .2s;}
+    background-size:20px 20px;cursor:default;transition:background-color .2s;
+    contain:layout paint;}
   #svg{width:100%;height:100%;display:block;touch-action:none;user-select:none;}
   #svg.panning{cursor:grabbing !important;}
   #svg.linking{cursor:crosshair !important;}
@@ -695,7 +696,7 @@
       <span class="divider"></span>
       <label class="chk"><input type="checkbox" id="chkGrid" checked> Lưới</label>
       <label class="chk"><input type="checkbox" id="chkSnap"> Bám</label>
-      <label class="chk"><input type="checkbox" id="chkGuides" checked> Guides</label>
+      <label class="chk"><input type="checkbox" id="chkSplitPorts" checked onchange="render(true)"> Tách mũi</label>
       <span class="divider"></span>
       <button id="btnNew" title="Tạo mới">Mới</button>
       <button id="btnOpen" title="Mở file .json">Mở</button>
@@ -2062,17 +2063,21 @@ function render(skipInspector) {
   nodesLayer.textContent = '';
   overlayLayer.textContent = '';
   if (groupsLayer) groupsLayer.textContent = '';
+  const isMobile = document.body.classList.contains('is-mobile');
+  const cullThreshold = isMobile ? 60 : 120;
+  const cull = nodes.length > cullThreshold;
   groups.forEach(g => {
     const el = makeGroupEl(g);
     if (el && groupsLayer) groupsLayer.appendChild(el);
   });
   edges.forEach(e => {
+    if (cull) {
+      const a = getNode(e.from), b = getNode(e.to);
+      if (a && b && !isNodeInViewport(a) && !isNodeInViewport(b)) return;
+    }
     const el = makeEdgeEl(e);
     if (el) edgesLayer.appendChild(el);
   });
-  const isMobile = document.body.classList.contains('is-mobile');
-  const cullThreshold = isMobile ? 60 : 120;
-  const cull = nodes.length > cullThreshold;
   nodes.forEach(n => {
     if (cull && !isNodeInViewport(n)) return;
     const el = makeNodeEl(n);
@@ -2085,7 +2090,7 @@ function render(skipInspector) {
     }
   });  drawOverlay();
   updateGrid();
-  drawMinimap();
+  if (skipInspector) updateMinimapViewportOnly(); else drawMinimap();
   if (!skipInspector) updateInspector();
   const pct = Math.round(view.k * 100) + '%';
   if (zoomLabel) zoomLabel.textContent = pct;
@@ -2206,12 +2211,14 @@ function makeEdgeEl(ed) {
   const s1 = (ed.fromSide && ed.fromSide !== 'auto') ? ed.fromSide : sides[0];
   const s2 = (ed.toSide && ed.toSide !== 'auto') ? ed.toSide : sides[1];
   let slot1 = 0, total1 = 1, slot2 = 0, total2 = 1;
-  if (_portData && _portData.portSlots) {
-    const pS1 = _portData.portSlots.get(ed.id + '::f');
-    const pS2 = _portData.portSlots.get(ed.id + '::t');
-    if (pS1) { slot1 = pS1.slot; total1 = pS1.total; }
-    if (pS2) { slot2 = pS2.slot; total2 = pS2.total; }
-  }
+  const splitEnabled = $('chkSplitPorts') ? $('chkSplitPorts').checked : true;
+
+if (splitEnabled && _portData && _portData.portSlots) {
+  const pS1 = _portData.portSlots.get(ed.id + '::f');
+  const pS2 = _portData.portSlots.get(ed.id + '::t');
+  if (pS1) { slot1 = pS1.slot; total1 = pS1.total; }
+  if (pS2) { slot2 = pS2.slot; total2 = pS2.total; }
+}
   const p1 = portPosWithSlot(a, s1, slot1, total1);
   const p2 = portPosWithSlot(b, s2, slot2, total2);
   const routing = ed.routing || 'orthogonal';
@@ -2405,6 +2412,24 @@ function updateGrid() {
   canvasWrap.style.backgroundImage = on ? 'radial-gradient(circle,var(--grid-dot) 1px,transparent 1px)' : 'none';
   canvasWrap.style.backgroundSize = (GRID * view.k) + 'px ' + (GRID * view.k) + 'px';
   canvasWrap.style.backgroundPosition = view.x + 'px ' + view.y + 'px';
+}
+function updateMinimapViewportOnly() {
+  const vp = minimapSvg && minimapSvg.querySelector('.minimap-viewport');
+  if (!vp) { drawMinimap(); return; }
+  const W = minimap.clientWidth || 200, H = minimap.clientHeight || 140;
+  if (!nodes.length) return;
+  const b = contentBounds();
+  const pad = 12;
+  const s = Math.min((W - pad * 2) / Math.max(1, b.w), (H - pad * 2) / Math.max(1, b.h));
+  const ox = (W - b.w * s) / 2 - b.x * s;
+  const oy = (H - b.h * s) / 2 - b.y * s;
+  const r = canvasWrap.getBoundingClientRect();
+  const vx1 = (0 - view.x) / view.k, vy1 = (0 - view.y) / view.k;
+  const vx2 = (r.width - view.x) / view.k, vy2 = (r.height - view.y) / view.k;
+  vp.setAttribute('x', ox + vx1 * s);
+  vp.setAttribute('y', oy + vy1 * s);
+  vp.setAttribute('width', (vx2 - vx1) * s);
+  vp.setAttribute('height', (vy2 - vy1) * s);
 }
 function drawMinimap() {
   if (!minimap || !minimapSvg) return;
@@ -4017,7 +4042,7 @@ function onPointerMove(e) {
       w = Math.round(w / GRID) * GRID; h = Math.round(h / GRID) * GRID;
     }
     n.x = x; n.y = y; n.w = w; n.h = h;
-    render(true);
+    renderRAF(true);
     return;
   }
     if (drag.type === 'link') {
@@ -4047,7 +4072,7 @@ function onPointerMove(e) {
       drag.snapSide = null;
       drag.snapPos = null;
     }
-    render(true);
+    renderRAF(true);
     return;
   }
     if (drag.type === 'edge-label') {
@@ -5938,8 +5963,6 @@ function autoSave() {
         activePageId
       };
       safeStorage.set('fwrt-flowchart-v8', JSON.stringify(data));
-      safeStorage.set('fwrt-flowchart-v7', JSON.stringify(data));
-      safeStorage.set('fwrt-flowchart-v6', JSON.stringify(data));
     } catch (_) {}
   }, 500);
 }
