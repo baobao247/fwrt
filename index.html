@@ -146,9 +146,25 @@
   .node path{transition:filter .12s;}
   .node:hover path.node-shape{filter:drop-shadow(0 3px 7px rgba(30,40,80,.16));}
   .port{cursor:crosshair;}
-  .port .port-dot{opacity:0;transition:opacity .13s;pointer-events:none;}
+  .port .port-dot{opacity:0;transition:opacity .13s, r .15s, filter .15s;pointer-events:none;}
   .node:hover .port .port-dot,.node.selected .port .port-dot,.port:hover .port-dot{opacity:1;}
-  .port:hover .port-dot{fill:var(--accent) !important;stroke:var(--accent) !important;}
+  .port:hover .port-dot{fill:var(--accent) !important;stroke:var(--accent) !important;filter:drop-shadow(0 0 6px rgba(79,70,229,.6));}
+  /* Khi đang kéo link: tất cả port của node đích sáng lên + pulse */
+  #svg.linking .node:hover .port .port-dot{
+    opacity:1;
+    fill:var(--accent) !important;
+    stroke:var(--accent) !important;
+    filter:drop-shadow(0 0 8px rgba(79,70,229,.8));
+    animation:portPulse .9s ease-in-out infinite;
+  }
+  @keyframes portPulse{
+    0%,100%{r:5;}
+    50%{r:7;}
+  }
+  /* Node đích khi kéo link: outline nhẹ */
+  #svg.linking .node:hover .node-shape{
+    filter:drop-shadow(0 0 12px rgba(79,70,229,.45));
+  }
   .node.selected .sel-outline{fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4;
     pointer-events:none;opacity:.85;}
   .lock-badge{pointer-events:none;}
@@ -347,6 +363,23 @@
   .tpl-item .tpl-name{font-weight:500;}
   #btnTogglePalette{position:relative;}
   body.palette-hidden #btnTogglePalette{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+  /* === Highlight connections khi hover === */
+  #svg.has-highlight .node:not(.hl),
+  #svg.has-highlight .edge:not(.hl){ opacity:.15; transition:opacity .18s ease; }
+  .node,.edge{ transition:opacity .18s ease; }
+  #svg.has-highlight .node.hl path.node-shape{
+    filter:drop-shadow(0 0 10px rgba(79,70,229,.6));
+  }
+  #svg.has-highlight .edge.hl .line{
+    stroke-width:3 !important;
+    filter:drop-shadow(0 0 6px rgba(79,70,229,.7));
+  }
+
+  /* === Edge label kéo được === */
+  .edge .label-group{ cursor:move; }
+  .edge .label-group .label-bg{ pointer-events:auto; }
+  .edge .label-group text{ pointer-events:auto; user-select:none; }
+  .edge.dragging-label .line{ opacity:.5; }
 </style>
 </head>
 <body>
@@ -1145,7 +1178,7 @@ try { lastEdgeStyle = JSON.parse(safeStorage.get('fwrt-last-edge-style', '{}')) 
 let lastStyle = {};
 try { lastStyle = JSON.parse(safeStorage.get('fwrt-last-style', '{}')) || {}; } catch (_) { lastStyle = {}; }
 let paletteHidden = safeStorage.get('fwrt-palette-hidden', '0') === '1';
-
+let _portData = null;
 function captureStyleFrom(node) {
   if (!node) return;
   lastStyle = {
@@ -1201,7 +1234,6 @@ const statEdges = $('statEdges');
 const chkGrid = $('chkGrid');
 const chkSnap = $('chkSnap');
 const chkGuides = $('chkGuides');
-const modeIndicator = $('modeIndicator');
 const ctxMenu = $('ctxMenu');
 const minimap = $('minimap');
 const minimapSvg = $('minimapSvg');
@@ -1319,8 +1351,103 @@ function portPos(n, side) {
 function autoSides(a, b) {
   const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
   const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
-  if (Math.abs(dx) > Math.abs(dy) * 1.15) return dx > 0 ? ['right', 'left'] : ['left', 'right'];
-  return dy > 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+
+  // Overlap thực tế giữa 2 hình (âm nếu không chồng)
+  const hOverlap = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const vOverlap = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  const hRatio = hOverlap / Math.max(1, Math.min(a.w, b.w));
+  const vRatio = vOverlap / Math.max(1, Math.min(a.h, b.h));
+
+  // Xếp chồng dọc rõ rệt → dùng top/bottom
+  if (hRatio > 0.55 && Math.abs(dy) > 10) {
+    return dy > 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+  }
+  // Xếp chồng ngang rõ rệt → dùng left/right
+  if (vRatio > 0.55 && Math.abs(dx) > 10) {
+    return dx > 0 ? ['right', 'left'] : ['left', 'right'];
+  }
+  // Chéo: chọn cặp port có khoảng cách ngắn nhất (có phạt cặp cùng phía)
+  let best = null, bestScore = Infinity;
+  const SIDES = ['top', 'right', 'bottom', 'left'];
+  for (const sA of SIDES) {
+    const pa = portPos(a, sA);
+    for (const sB of SIDES) {
+      const pb = portPos(b, sB);
+      let score = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+      // Phạt cặp cùng phía / không đối diện (tạo đường vòng xấu)
+      const opposite = (sA === 'top' && sB === 'bottom') || (sA === 'bottom' && sB === 'top') ||
+                       (sA === 'left' && sB === 'right') || (sA === 'right' && sB === 'left');
+      if (!opposite) score += 60;
+      if (sA === sB) score += 120;
+      if (score < bestScore) { bestScore = score; best = [sA, sB]; }
+    }
+  }
+  return best || (Math.abs(dx) > Math.abs(dy)
+    ? (dx > 0 ? ['right', 'left'] : ['left', 'right'])
+    : (dy > 0 ? ['bottom', 'top'] : ['top', 'bottom']));
+}
+
+/* Tìm port gần nhất của 1 node so với 1 điểm */
+function findNearestPort(node, pt) {
+  let best = 'top', bestD = Infinity;
+  ['top', 'right', 'bottom', 'left'].forEach(s => {
+    const p = portPos(node, s);
+    const d = (p.x - pt.x) ** 2 + (p.y - pt.y) ** 2;
+    if (d < bestD) { bestD = d; best = s; }
+  });
+  return { side: best, pos: portPos(node, best), dist: Math.sqrt(bestD) };
+}
+
+/* Đếm vị trí của edge trong nhóm song song (cùng cặp node) */
+function getParallelOffset(ed, allEdges) {
+  const keyOf = (a, b) => (a < b ? a + '\u0000' + b : b + '\u0000' + a);
+  const k = keyOf(ed.from, ed.to);
+  const group = allEdges.filter(e => keyOf(e.from, e.to) === k)
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  if (group.length <= 1) return 0;
+  const idx = group.findIndex(e => e.id === ed.id);
+  const mid = (group.length - 1) / 2;
+  return (idx - mid) * 16;
+}
+
+/* Chia đều port khi nhiều edge cùng vào 1 cạnh */
+function precomputePorts() {
+  const groups = new Map();
+  edges.forEach(e => {
+    const a = getNode(e.from), b = getNode(e.to);
+    if (!a || !b) return;
+    const auto = autoSides(a, b);
+    const s1 = (e.fromSide && e.fromSide !== 'auto') ? e.fromSide : auto[0];
+    const s2 = (e.toSide && e.toSide !== 'auto') ? e.toSide : auto[1];
+    const k1 = e.from + '::' + s1;
+    const k2 = e.to + '::' + s2;
+    if (!groups.has(k1)) groups.set(k1, []);
+    if (!groups.has(k2)) groups.set(k2, []);
+    groups.get(k1).push({ eid: e.id, isFrom: true });
+    groups.get(k2).push({ eid: e.id, isFrom: false });
+  });
+  const portSlots = new Map();
+  groups.forEach((list, key) => {
+    list.sort((a, b) => a.eid < b.eid ? -1 : 1);
+    const parts = key.split('::');
+    const side = parts[1];
+    list.forEach((it, i) => {
+      const k = it.eid + '::' + (it.isFrom ? 'f' : 't');
+      portSlots.set(k, { side, slot: i, total: list.length });
+    });
+  });
+return { portSlots };
+}
+
+function portPosWithSlot(n, side, slot, total) {
+  const base = portPos(n, side);
+  if (!total || total <= 1) return base;
+  const span = (side === 'top' || side === 'bottom') ? n.w : n.h;
+  const spacing = Math.min(20, Math.max(9, span / (total + 1)));
+  const idx = slot - (total - 1) / 2;
+  const offset = idx * spacing;
+  if (side === 'top' || side === 'bottom') return { x: base.x + offset, y: base.y };
+  return { x: base.x, y: base.y + offset };
 }
 function shiftPt(p, side, d) {
   switch (side) {
@@ -1335,24 +1462,109 @@ function shiftPt(p, side, d) {
 /* ==================================================================
    BUILD EDGE PATH — 4 routing modes, supports corner radius
    ================================================================== */
-function buildOrthogonalPolyline(p1, s1, p2, s2) {
-  const gap = 28;
+function buildOrthogonalPolyline(p1, s1, p2, s2, offset) {
+  offset = offset || 0;
+  const gap = Math.max(22, Math.min(34, 8 + offset * 0.25));
   const e1 = shiftPt(p1, s1, gap);
   const e2 = shiftPt(p2, s2, gap);
   const h1 = s1 === 'left' || s1 === 'right';
   const h2 = s2 === 'left' || s2 === 'right';
   const pts = [p1, e1];
-  if (h1 && h2) { const mx = (e1.x + e2.x) / 2; pts.push({ x: mx, y: e1.y }, { x: mx, y: e2.y }); }
-  else if (!h1 && !h2) { const my = (e1.y + e2.y) / 2; pts.push({ x: e1.x, y: my }, { x: e2.x, y: my }); }
-  else if (h1) pts.push({ x: e2.x, y: e1.y });
-  else pts.push({ x: e1.x, y: e2.y });
+
+  if (h1 && h2) {
+    // Cả 2 theo phương ngang → dịch đoạn dọc ở giữa
+    const baseX = (e1.x + e2.x) / 2;
+    // Nếu 2 đầu đối diện nhau, offset theo trục dọc để tách song song
+    const mx = baseX + offset;
+    pts.push({ x: mx, y: e1.y }, { x: mx, y: e2.y });
+  } else if (!h1 && !h2) {
+    // Cả 2 theo phương dọc → dịch đoạn ngang ở giữa
+    const baseY = (e1.y + e2.y) / 2;
+    const my = baseY + offset;
+    pts.push({ x: e1.x, y: my }, { x: e2.x, y: my });
+  } else if (h1) {
+    // Ra ngang, vào dọc
+    pts.push({ x: e2.x + offset, y: e1.y });
+  } else {
+    // Ra dọc, vào ngang
+    pts.push({ x: e1.x, y: e2.y + offset });
+  }
   pts.push(e2, p2);
+
+  // Loại bỏ điểm trùng
   const filt = [pts[0]];
   for (let i = 1; i < pts.length; i++) {
     const l = filt[filt.length - 1];
     if (Math.abs(pts[i].x - l.x) > 0.5 || Math.abs(pts[i].y - l.y) > 0.5) filt.push(pts[i]);
   }
   return filt;
+}
+
+function buildEdgePath(p1, s1, p2, s2, routing, cornerRadius, offset) {
+  cornerRadius = cornerRadius || 0;
+  offset = offset || 0;
+
+  if (routing === 'straight') {
+    // Thẳng: vẫn offset nhẹ nếu song song
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    // Dịch vuông góc với hướng
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const L = Math.hypot(dx, dy) || 1;
+    const nx = -dy / L * offset, ny = dx / L * offset;
+    return { d: 'M ' + p1.x + ' ' + p1.y + ' L ' + (p2.x + nx) + ' ' + (p2.y + ny), mid: { x: mx + nx / 2, y: my + ny / 2 } };
+  }
+
+  if (routing === 'orthogonal' || routing === 'orthogonal_rounded') {
+    const filt = buildOrthogonalPolyline(p1, s1, p2, s2, offset);
+    const mid = polylineMidpoint(filt);
+
+    if (routing === 'orthogonal' || cornerRadius <= 0 || filt.length < 3) {
+      let dstr = 'M ' + filt[0].x + ' ' + filt[0].y;
+      for (let i = 1; i < filt.length; i++) dstr += ' L ' + filt[i].x + ' ' + filt[i].y;
+      return { d: dstr, mid, filt };
+    }
+
+    // Bo góc: dùng quadratic ở mỗi góc, bán kính giới hạn theo độ dài 2 đoạn kề
+    let d = 'M ' + filt[0].x + ' ' + filt[0].y;
+    for (let i = 1; i < filt.length - 1; i++) {
+      const prev = filt[i - 1], cur = filt[i], next = filt[i + 1];
+      const dPrev = Math.hypot(cur.x - prev.x, cur.y - prev.y);
+      const dNext = Math.hypot(next.x - cur.x, next.y - cur.y);
+      const r = Math.min(cornerRadius, dPrev / 2, dNext / 2);
+      const t1 = dPrev > 0 ? r / dPrev : 0;
+      const before = { x: cur.x - (cur.x - prev.x) * t1, y: cur.y - (cur.y - prev.y) * t1 };
+      const t2 = dNext > 0 ? r / dNext : 0;
+      const after = { x: cur.x + (next.x - cur.x) * t2, y: cur.y + (next.y - cur.y) * t2 };
+      d += ' L ' + before.x.toFixed(2) + ' ' + before.y.toFixed(2);
+      d += ' Q ' + cur.x + ' ' + cur.y + ' ' + after.x.toFixed(2) + ' ' + after.y.toFixed(2);
+    }
+    d += ' L ' + filt[filt.length - 1].x + ' ' + filt[filt.length - 1].y;
+    return { d, mid, filt };
+  }
+
+  // Curve: kiểm soát độ dài control point theo HƯỚNG của port, không theo khoảng cách thô
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const dist = Math.hypot(dx, dy);
+  const h1 = s1 === 'left' || s1 === 'right';
+  const h2 = s2 === 'left' || s2 === 'right';
+  let d1, d2;
+  if (h1 && h2)      { d1 = Math.max(36, Math.abs(dx) * 0.5); d2 = Math.max(36, Math.abs(dx) * 0.5); }
+  else if (!h1 && !h2){ d1 = Math.max(36, Math.abs(dy) * 0.5); d2 = Math.max(36, Math.abs(dy) * 0.5); }
+  else                { d1 = Math.max(36, Math.min(dist * 0.5, (h1 ? Math.abs(dx) : Math.abs(dy)) + 30));
+                        d2 = Math.max(36, Math.min(dist * 0.5, (h2 ? Math.abs(dx) : Math.abs(dy)) + 30)); }
+  d1 = Math.min(d1, 200); d2 = Math.min(d2, 200);
+  const c1 = shiftPt(p1, s1, d1);
+  const c2 = shiftPt(p2, s2, d2);
+  // Offset cho curve: dịch vuông góc với đường nối
+  const L = dist || 1;
+  const nx = -dy / L * offset * 0.6, ny = dx / L * offset * 0.6;
+  const midBase = { x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8, y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8 };
+  return {
+    d: 'M ' + p1.x + ' ' + p1.y +
+       ' C ' + (c1.x + nx) + ' ' + (c1.y + ny) + ' ' +
+       (c2.x + nx) + ' ' + (c2.y + ny) + ' ' + p2.x + ' ' + p2.y,
+    mid: { x: midBase.x + nx, y: midBase.y + ny }
+  };
 }
 function polylineMidpoint(filt) {
   let total = 0;
@@ -1384,52 +1596,6 @@ function polylinePoint(filt, ratio) {
   }
   return filt[filt.length - 1];
 }
-function buildEdgePath(p1, s1, p2, s2, routing, cornerRadius) {
-  cornerRadius = cornerRadius || 0;
-  if (routing === 'straight') {
-    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-    return { d: 'M ' + p1.x + ' ' + p1.y + ' L ' + p2.x + ' ' + p2.y, mid };
-  }
-  if (routing === 'orthogonal' || routing === 'orthogonal_rounded') {
-    const filt = buildOrthogonalPolyline(p1, s1, p2, s2);
-    const mid = polylineMidpoint(filt);
-
-    // Plain (sharp corners)
-    if (routing === 'orthogonal' || cornerRadius <= 0 || filt.length < 3) {
-      let dstr = 'M ' + filt[0].x + ' ' + filt[0].y;
-      for (let i = 1; i < filt.length; i++) dstr += ' L ' + filt[i].x + ' ' + filt[i].y;
-      return { d: dstr, mid };
-    }
-
-    // Rounded corners
-    let d = 'M ' + filt[0].x + ' ' + filt[0].y;
-    for (let i = 1; i < filt.length - 1; i++) {
-      const prev = filt[i - 1];
-      const cur = filt[i];
-      const next = filt[i + 1];
-      const dPrev = Math.hypot(cur.x - prev.x, cur.y - prev.y);
-      const dNext = Math.hypot(next.x - cur.x, next.y - cur.y);
-      const r = Math.min(cornerRadius, dPrev / 2, dNext / 2);
-      const t1 = dPrev > 0 ? r / dPrev : 0;
-      const before = { x: cur.x - (cur.x - prev.x) * t1, y: cur.y - (cur.y - prev.y) * t1 };
-      const t2 = dNext > 0 ? r / dNext : 0;
-      const after = { x: cur.x + (next.x - cur.x) * t2, y: cur.y + (next.y - cur.y) * t2 };
-      d += ' L ' + before.x.toFixed(2) + ' ' + before.y.toFixed(2);
-      d += ' Q ' + cur.x + ' ' + cur.y + ' ' + after.x.toFixed(2) + ' ' + after.y.toFixed(2);
-    }
-    d += ' L ' + filt[filt.length - 1].x + ' ' + filt[filt.length - 1].y;
-    return { d, mid };
-  }
-  // curve (default)
-  const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-  const d = clamp(dist * 0.42, 34, 160);
-  const c1 = shiftPt(p1, s1, d);
-  const c2 = shiftPt(p2, s2, d);
-  return {
-    d: 'M ' + p1.x + ' ' + p1.y + ' C ' + c1.x + ' ' + c1.y + ' ' + c2.x + ' ' + c2.y + ' ' + p2.x + ' ' + p2.y,
-    mid: { x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8, y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8 }
-  };
-}
 const getNode = id => nodes.find(n => n.id === id);
 const getEdge = id => edges.find(e => e.id === id);
 
@@ -1446,6 +1612,7 @@ function pushRecentColor(fill, stroke) {
    ================================================================== */
 function render(skipInspector) {
   if (!viewport) return;
+  _portData = precomputePorts();
   viewport.setAttribute('transform', 'translate(' + view.x + ' ' + view.y + ') scale(' + view.k + ')');
   edgesLayer.textContent = '';
   nodesLayer.textContent = '';
@@ -1545,10 +1712,19 @@ function makeEdgeEl(ed) {
   const sides = autoSides(a, b);
   const s1 = (ed.fromSide && ed.fromSide !== 'auto') ? ed.fromSide : sides[0];
   const s2 = (ed.toSide && ed.toSide !== 'auto') ? ed.toSide : sides[1];
-  const p1 = portPos(a, s1), p2 = portPos(b, s2);
+  let slot1 = 0, total1 = 1, slot2 = 0, total2 = 1;
+  if (_portData && _portData.portSlots) {
+    const pS1 = _portData.portSlots.get(ed.id + '::f');
+    const pS2 = _portData.portSlots.get(ed.id + '::t');
+    if (pS1) { slot1 = pS1.slot; total1 = pS1.total; }
+    if (pS2) { slot2 = pS2.slot; total2 = pS2.total; }
+  }
+  const p1 = portPosWithSlot(a, s1, slot1, total1);
+  const p2 = portPosWithSlot(b, s2, slot2, total2);
   const routing = ed.routing || 'orthogonal';
   const cornerRadius = ed.cornerRadius != null ? ed.cornerRadius : 12;
-  const built = buildEdgePath(p1, s1, p2, s2, routing, cornerRadius);
+  const parallelOffset = getParallelOffset(ed, edges);
+  const built = buildEdgePath(p1, s1, p2, s2, routing, cornerRadius, parallelOffset);
   const color = ed.color || '#7c869e';
   const width = ed.width || 2;
 
@@ -1565,7 +1741,6 @@ function makeEdgeEl(ed) {
   else if (lineStyle === 'dashdot') lineAttrs['stroke-dasharray'] = '8 4 2 4';
   g.appendChild(svgEl('path', lineAttrs));
 
-  /* Label with full styling */
   if (ed.label) {
     const fs = clamp(ed.labelFontSize || 11.5, 5, 72);
     const weight = ed.labelBold ? 700 : 500;
@@ -1574,20 +1749,31 @@ function makeEdgeEl(ed) {
     const tw = _mctx.measureText(ed.label).width;
     const lh = fs * 1.35;
     const pad = ed.labelBg !== false ? 5 : 2;
+    const t = clamp(ed.labelT != null ? ed.labelT : 0.5, 0, 1);
+    let lp = built.mid;
+    if (built.filt) {
+      lp = polylinePoint(built.filt, t);
+    } else if (routing === 'straight') {
+      lp = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t };
+    }
+    const lg = svgEl('g', { class: 'label-group' });
     if (ed.labelBg !== false) {
-      g.appendChild(svgEl('rect', {
-        x: built.mid.x - tw / 2 - pad, y: built.mid.y - lh / 2 - 2, width: tw + pad * 2, height: lh + 4,
-        rx: 6, fill: darkMode ? '#1f2738' : '#fff',
-        stroke: darkMode ? '#2a3145' : '#e3e7f0', 'stroke-width': 1, 'pointer-events': 'none'
+      lg.appendChild(svgEl('rect', {
+        class: 'label-bg',
+        x: lp.x - tw / 2 - pad, y: lp.y - lh / 2 - 2,
+        width: tw + pad * 2, height: lh + 4, rx: 6,
+        fill: darkMode ? '#1f2738' : '#fff',
+        stroke: darkMode ? '#2a3145' : '#e3e7f0', 'stroke-width': 1
       }));
     }
-    const t = svgEl('text', {
-      x: built.mid.x, y: built.mid.y, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
+    const tEl = svgEl('text', {
+      x: lp.x, y: lp.y, 'text-anchor': 'middle', 'dominant-baseline': 'middle',
       fill: ed.labelColor || (darkMode ? '#a8b0c4' : '#475569'),
       'font-size': fs, 'font-weight': weight, 'font-style': fstyle, 'font-family': FONT
     });
-    t.textContent = ed.label;
-    g.appendChild(t);
+    tEl.textContent = ed.label;
+    lg.appendChild(tEl);
+    g.appendChild(lg);
   }
   return g;
 }
@@ -1616,20 +1802,50 @@ function drawOverlay() {
       }
     });
   }
-  if (drag && drag.type === 'link') {
+    if (drag && drag.type === 'link') {
     const a = getNode(drag.from);
     if (a) {
-      const side = drag.fromSide === 'auto' ? 'right' : drag.fromSide;
-      const p1 = portPos(a, side);
-      const p2 = drag.cursor;
+      const s1 = drag.fromSide === 'auto' ? 'right' : drag.fromSide;
+      const p1 = portPos(a, s1);
+      const snapped = !!drag.snapPos;
+      const p2 = snapped ? drag.snapPos : drag.cursor;
+      const col = snapped ? '#16a34a' : '#4f46e5';
+
+      // Vẽ path cong nhẹ cho preview
+      const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
       overlayLayer.appendChild(svgEl('path', {
-        d: 'M ' + p1.x + ' ' + p1.y + ' L ' + p2.x + ' ' + p2.y,
-        stroke: '#4f46e5', 'stroke-width': 2.5, fill: 'none',
-        'stroke-dasharray': '7 5', 'pointer-events': 'none', 'stroke-linecap': 'round'
+        d: 'M ' + p1.x + ' ' + p1.y + ' Q ' + mx + ' ' + my + ' ' + p2.x + ' ' + p2.y,
+        stroke: col, 'stroke-width': 2.4, fill: 'none',
+        'stroke-dasharray': '7 5', 'pointer-events': 'none',
+        'stroke-linecap': 'round', opacity: .9
       }));
-      overlayLayer.appendChild(svgEl('circle', { cx: p1.x, cy: p1.y, r: 4, fill: '#4f46e5', 'pointer-events': 'none' }));
-      overlayLayer.appendChild(svgEl('circle', { cx: p2.x, cy: p2.y, r: 6, fill: '#4f46e5', opacity: .9, 'pointer-events': 'none' }));
-      overlayLayer.appendChild(svgEl('circle', { cx: p2.x, cy: p2.y, r: 11, fill: 'none', stroke: '#4f46e5', 'stroke-width': 1.5, opacity: .4, 'pointer-events': 'none' }));
+
+      // Điểm xuất phát
+      overlayLayer.appendChild(svgEl('circle', {
+        cx: p1.x, cy: p1.y, r: 5, fill: col, 'pointer-events': 'none'
+      }));
+
+      // Điểm kết thúc
+      overlayLayer.appendChild(svgEl('circle', {
+        cx: p2.x, cy: p2.y, r: snapped ? 8 : 6, fill: col, opacity: .9, 'pointer-events': 'none'
+      }));
+
+      // Halo quanh điểm kết thúc — vòng ngoài
+      overlayLayer.appendChild(svgEl('circle', {
+        cx: p2.x, cy: p2.y, r: snapped ? 14 : 11,
+        fill: 'none', stroke: col, 'stroke-width': snapped ? 2.2 : 1.5,
+        opacity: snapped ? .7 : .4, 'pointer-events': 'none'
+      }));
+
+      // Nếu đã snap, thêm 1 vòng pulse nhỏ
+      if (snapped) {
+        overlayLayer.appendChild(svgEl('circle', {
+          cx: p2.x, cy: p2.y, r: 20,
+          fill: 'none', stroke: col, 'stroke-width': 1,
+          opacity: .25, 'pointer-events': 'none',
+          'stroke-dasharray': '3 4'
+        }));
+      }
     }
   }
   if (drag && drag.type === 'rubber') {
@@ -2348,6 +2564,46 @@ if (svg) {
   svg.addEventListener('pointercancel', onPointerUp);
 }
 function closestOf(t, sel) { return (t && t.closest) ? t.closest(sel) : null; }
+function highlightConnections(nodeId) {
+  if (!nodeId) {
+    svg.classList.remove('has-highlight');
+    nodesLayer.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
+    edgesLayer.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
+    return;
+  }
+  const related = new Set([nodeId]);
+  const edgeIds = new Set();
+  edges.forEach(e => {
+    if (e.from === nodeId) { related.add(e.to); edgeIds.add(e.id); }
+    if (e.to === nodeId)   { related.add(e.from); edgeIds.add(e.id); }
+  });
+  svg.classList.add('has-highlight');
+  nodesLayer.querySelectorAll('.node').forEach(el => {
+    el.classList.toggle('hl', related.has(el.dataset.id));
+  });
+  edgesLayer.querySelectorAll('.edge').forEach(el => {
+    el.classList.toggle('hl', edgeIds.has(el.dataset.id));
+  });
+}
+
+if (svg) {
+  svg.addEventListener('mouseover', e => {
+    if (drag) return;
+    const nodeEl = closestOf(e.target, '.node');
+    if (nodeEl) highlightConnections(nodeEl.dataset.id);
+  });
+   svg.addEventListener('mouseout', e => {
+    if (drag) return;
+    const fromNode = closestOf(e.target, '.node');
+    if (!fromNode) return;
+    const toNode = e.relatedTarget && e.relatedTarget.closest
+      ? e.relatedTarget.closest('.node')
+      : null;
+    if (toNode && toNode === fromNode) return;
+    highlightConnections(null);
+  });
+  svg.addEventListener('pointerdown', () => { highlightConnections(null); }, true);
+}
 
 function onPointerDown(e) {
   if (e.button === 2) return;
@@ -2413,9 +2669,54 @@ function onPointerDown(e) {
     safeCapture(e.pointerId);
     return;
   }
+  /* Label drag */
+  const labelEl = closestOf(t, '.label-group');
+  if (labelEl) {
+    e.preventDefault();
+    const edgeId = labelEl.closest('.edge').dataset.id;
+    if (edgeId) {
+      drag = { type: 'edge-label', id: edgeId, moved: false };
+      safeCapture(e.pointerId);
+      return;
+    }
+  }
   if (edgeEl) {
     e.preventDefault();
     const id = edgeEl.dataset.id;
+
+    // Ctrl + click: chèn node vào giữa đường nối
+    if (e.ctrlKey || e.metaKey) {
+      const ed = getEdge(id);
+      if (ed) {
+        const a = getNode(ed.from), b = getNode(ed.to);
+        if (a && b) {
+          const sides = autoSides(a, b);
+          const s1 = (ed.fromSide && ed.fromSide !== 'auto') ? ed.fromSide : sides[0];
+          const s2 = (ed.toSide && ed.toSide !== 'auto') ? ed.toSide : sides[1];
+          const p1 = portPos(a, s1), p2 = portPos(b, s2);
+          const routing = ed.routing || 'orthogonal';
+          const parallelOffset = getParallelOffset(ed, edges);
+          const built = buildEdgePath(p1, s1, p2, s2, routing, ed.cornerRadius != null ? ed.cornerRadius : 12, parallelOffset);
+          const mid = built.mid;
+          // Tạo node mới tại midpoint
+          const nn = addNode(lastCreatedShape, mid.x, mid.y, '');
+          // Copy style mềm từ node nguồn
+          nn.fill = a.fill; nn.stroke = a.stroke;
+          nn.textColor = a.textColor;
+          // Cắt edge cũ, tạo 2 edge mới
+          edges = edges.filter(x => x.id !== id);
+          addEdge(ed.from, nn.id, ed.fromSide, 'auto');
+          addEdge(nn.id, ed.to, 'auto', ed.toSide);
+          clearSelection();
+          selected.nodes.add(nn.id);
+          render(); pushHistory();
+          focusInspectorText(nn.id);
+          toast('Đã chèn node vào đường nối', 'success');
+          return;
+        }
+      }
+    }
+
     if (!e.shiftKey) clearSelection();
     selected.edges.add(id);
     selected.nodes.clear();
@@ -2493,12 +2794,69 @@ function onPointerMove(e) {
     render(true);
     return;
   }
-  if (drag.type === 'link') {
+    if (drag.type === 'link') {
     drag.cursor = p;
     const el = document.elementFromPoint(e.clientX, e.clientY);
+    const tgtPort = el && el.closest ? el.closest('.port') : null;
     const tgt = el && el.closest ? el.closest('.node') : null;
     const target = (tgt && tgt.dataset.id !== drag.from) ? tgt.dataset.id : null;
     linkTargetId = target;
+    // Snap vào port gần nhất
+    if (target) {
+      const node = getNode(target);
+      if (node) {
+        if (tgtPort && tgtPort.dataset.node === target) {
+          drag.snapSide = tgtPort.dataset.side;
+          drag.snapPos = portPos(node, drag.snapSide);
+        } else {
+          const np = findNearestPort(node, p);
+          drag.snapSide = np.side;
+          drag.snapPos = np.pos;
+        }
+      }
+    } else {
+      drag.snapSide = null;
+      drag.snapPos = null;
+    }
+    render(true);
+    return;
+  }
+    if (drag.type === 'edge-label') {
+    drag.moved = true;
+    const ed = getEdge(drag.id);
+    if (!ed) return;
+    const a = getNode(ed.from), b = getNode(ed.to);
+    if (!a || !b) return;
+    const sides = autoSides(a, b);
+    const s1 = (ed.fromSide && ed.fromSide !== 'auto') ? ed.fromSide : sides[0];
+    const s2 = (ed.toSide && ed.toSide !== 'auto') ? ed.toSide : sides[1];
+    // Dùng đúng slot như makeEdgeEl
+    let slot1 = 0, total1 = 1, slot2 = 0, total2 = 1;
+    if (_portData && _portData.portSlots) {
+      const pS1 = _portData.portSlots.get(ed.id + '::f');
+      const pS2 = _portData.portSlots.get(ed.id + '::t');
+      if (pS1) { slot1 = pS1.slot; total1 = pS1.total; }
+      if (pS2) { slot2 = pS2.slot; total2 = pS2.total; }
+    }
+    const p1 = portPosWithSlot(a, s1, slot1, total1);
+    const p2 = portPosWithSlot(b, s2, slot2, total2);
+    const routing = ed.routing || 'orthogonal';
+    const parallelOffset = getParallelOffset(ed, edges);
+    if (routing === 'orthogonal' || routing === 'orthogonal_rounded') {
+      const filt = buildOrthogonalPolyline(p1, s1, p2, s2, parallelOffset);
+      let bestT = 0.5, bestD = Infinity;
+      for (let i = 0; i <= 30; i++) {
+        const tt = i / 30;
+        const pt = polylinePoint(filt, tt);
+        const d = (pt.x - p.x) ** 2 + (pt.y - p.y) ** 2;
+        if (d < bestD) { bestD = d; bestT = tt; }
+      }
+      ed.labelT = bestT;
+    } else {
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const L2 = dx * dx + dy * dy;
+      ed.labelT = L2 > 0 ? clamp(((p.x - p1.x) * dx + (p.y - p1.y) * dy) / L2, 0, 1) : 0.5;
+    }
     render(true);
     return;
   }
@@ -2515,6 +2873,11 @@ function onPointerUp(e) {
   currentGuides = [];
   svg.classList.remove('panning', 'linking');
   try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+   if (d.type === 'edge-label') {
+    if (d.moved) pushHistory();
+    render();
+    return;
+  }
   if (d.type === 'node') {
     if (d.moved) pushHistory();
     render();
@@ -2534,8 +2897,18 @@ function onPointerUp(e) {
     const tgtNode = el && el.closest ? el.closest('.node') : null;
     const tgtPort = el && el.closest ? el.closest('.port') : null;
     let targetId = null, targetSide = 'auto';
-    if (tgtPort) { targetId = tgtPort.dataset.node; targetSide = tgtPort.dataset.side; }
-    else if (tgtNode) { targetId = tgtNode.dataset.id; }
+    if (tgtPort) {
+      targetId = tgtPort.dataset.node;
+      targetSide = tgtPort.dataset.side;
+    } else if (tgtNode) {
+      targetId = tgtNode.dataset.id;
+      // Ưu tiên side đã snap khi kéo, nếu không thì tìm gần nhất
+      if (d.snapSide && d.snapSide !== null) targetSide = d.snapSide;
+      else {
+        const node = getNode(targetId);
+        if (node) targetSide = findNearestPort(node, d.cursor).side;
+      }
+    }
     linkTargetId = null;
     if (targetId && targetId !== d.from) {
       addEdge(d.from, targetId, d.fromSide, targetSide);
@@ -2872,9 +3245,6 @@ function openEdgeCtx(e, id) {
   const lineStyle = ed.lineStyle || (ed.dashed ? 'dashed' : 'solid');
   const arrStyle = ed.arrowStyle || 'solid';
   const labelFS = ed.labelFontSize || 11.5;
-
-  const setAll = (fn) => { fn(ed); render(); pushHistory(); };
-
   buildCtx([
     { icon: '🏷', label: ed.label ? 'Sửa nhãn' : 'Thêm nhãn', action: () => {
       showPrompt('Nhãn cho đường nối:', ed.label || '', { title: 'Nhãn', okText: 'Lưu' })
@@ -3127,6 +3497,32 @@ window.addEventListener('keydown', e => {
   }
   if (inField) { if (e.key === 'Escape') e.target.blur(); return; }
   const ctrl = e.ctrlKey || e.metaKey, shift = e.shiftKey, alt = e.altKey;
+
+  if (!ctrl && !shift && !alt && (e.key === 'a' || e.key === 'A') && !inField) {
+    e.preventDefault();
+    const c = centerWorld();
+    const n = addNode(lastCreatedShape, c.x, c.y);
+    clearSelection();
+    selected.nodes.add(n.id);
+    render(); pushHistory();
+    return;
+  }
+  if (!ctrl && !shift && !alt && e.key === '/' && !inField) {
+    e.preventDefault(); openSearch(); return;
+  }
+  if (!ctrl && !shift && !alt && selected.edges.size && ['1','2','3','4'].indexOf(e.key) >= 0 && !inField) {
+    e.preventDefault();
+    const r = ['curve', 'straight', 'orthogonal', 'orthogonal_rounded'][parseInt(e.key, 10) - 1];
+    selected.edges.forEach(id => { const ed = getEdge(id); if (ed) ed.routing = r; });
+    render(); pushHistory();
+    toast('Routing → ' + r, 'success');
+    return;
+  }
+  if (e.key === 'Escape' && !inField) {
+    if (selected.nodes.size || selected.edges.size) {
+      clearSelection(); render(); e.preventDefault(); return;
+    }
+  }
   if (ctrl && e.key.toLowerCase() === 'k') { e.preventDefault(); openCmd(); return; }
   if (ctrl && e.key.toLowerCase() === 'b') { e.preventDefault(); togglePalette(); return; }
   if (ctrl && shift && e.key === 'Tab') { e.preventDefault(); openTabDropdown(); return; }
@@ -3168,7 +3564,6 @@ window.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('keyup', e => { if (e.code === 'Space') spaceDown = false; });
-function flashIndicator(text) { toast(text, 'info'); }
 function toggleFullscreen() {
   try {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -3241,8 +3636,18 @@ function openHelp() {
       '<div class="shortcut-row"><span>Mũi tên</span><span>Đặc · Rỗng · Thoi · Tròn · Vạch</span></div>' +
       '<div class="shortcut-row"><span>Nhãn</span><span>Cỡ chữ · Màu · Đậm · Nghiêng · Nền</span></div>' +
       '<div class="shortcut-row"><span>Truy cập nhanh</span><span>Chuột phải vào đường nối</span></div>' +
-      '<div class="shortcut-row"><span>Mặc định</span><span>Gấp nhọn (orthogonal)</span></div></div>' +
-      '<div class="shortcut-section"><h3>Thao tác với hình</h3>' +
+      '<div class="shortcut-row"><span>Mặc định</span><span>Gấp nhọn (orthogonal)</span></div>' +
+      '<div class="shortcut-row"><span>Chèn node vào đường</span><span>Ctrl + Click đường nối</span></div>' +
+      '<div class="shortcut-row"><span>Snap port</span><span>Tự động khi hover node khi kéo</span></div>' +
+      '<div class="shortcut-row"><span>Nhiều đường song song</span><span>Tự động tách 16px</span></div>' +
+      '<div class="shortcut-row"><span>Nhiều edge cùng port</span><span>Tự động chia đều</span></div>' +
+      '<div class="shortcut-row"><span>Kéo label edge</span><span>Kéo nhãn dọc theo đường</span></div>' +
+      '<div class="shortcut-row"><span>Highlight</span><span>Hover node → sáng đường liên quan</span></div></div>' +
+      '<div class="shortcut-section"><h3>Shortcut bổ sung</h3>' +
+      '<div class="shortcut-row"><span>Thêm node ở giữa</span><span>A</span></div>' +
+      '<div class="shortcut-row"><span>Focus tìm kiếm</span><span>/</span></div>' +
+      '<div class="shortcut-row"><span>Đổi routing edge</span><span>1 2 3 4 (khi chọn edge)</span></div>' +
+      '<div class="shortcut-row"><span>Bỏ chọn</span><span>Esc</span></div></div>' +      '<div class="shortcut-section"><h3>Thao tác với hình</h3>' +
       '<div class="shortcut-row"><span>Click lần 1</span><span>Chọn hình</span></div>' +
       '<div class="shortcut-row"><span>Click lần 2 / Dbl-click</span><span>Focus ô Nội dung ở Inspector</span></div>' +
       '<div class="shortcut-row"><span>Click vùng trống</span><span>Bỏ chọn</span></div></div>' +
@@ -3484,7 +3889,6 @@ function renderEdgeInspector(ed) {
   const arrStyle = ed.arrowStyle || 'solid';
   const labelFS = ed.labelFontSize || 11.5;
   const cornerR = ed.cornerRadius != null ? ed.cornerRadius : 12;
-  const isOrth = routing === 'orthogonal' || routing === 'orthogonal_rounded';
 
   inspector.innerHTML =
     '<div class="insp-title">Thuộc tính đường nối</div>' +
